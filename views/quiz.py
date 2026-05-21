@@ -1,6 +1,32 @@
 import streamlit as st
 
 # ----------------------------------------------------
+# 💡 [신규] 문제 피드백 모달 다이얼로그
+# ----------------------------------------------------
+@st.dialog("이 문항에 오류가 있나요?")
+def show_feedback_dialog(q_id):
+    st.markdown(f"**{q_id}** 문항에 대한 피드백을 선택해주세요.")
+    
+    st.radio(
+        "어떤 문제가 있나요?",
+        options=[
+            "문제가 애매해요",
+            "정답이 틀린 것 같아요",
+            "해설이 이해가 안 돼요",
+            "문제가 내용과 관련 없어요"
+        ],
+        key=f"fb_type_{q_id}",
+        label_visibility="collapsed"
+    )
+    
+    st.write("")
+    st.text_area("상세 내용 (선택)", placeholder="어떤 부분이 이상한지 구체적으로 적어주시면 AI 에이전트 개선에 큰 도움이 됩니다!", key=f"fb_memo_{q_id}")
+    
+    if st.button("피드백 제출하기", type="primary", use_container_width=True):
+        st.toast(f"{q_id} 문항에 대한 피드백이 접수되었습니다. 감사합니다! 🙇‍♀️", icon="✅")
+        st.rerun()
+
+# ----------------------------------------------------
 # 💡 문제 유형별 렌더링 컴포넌트 (범용 설계)
 # ----------------------------------------------------
 def render_question_input(q, idx, prefix):
@@ -28,6 +54,7 @@ def render_question_input(q, idx, prefix):
     elif q['type'] == "빈칸채우기":
         return st.text_input("정답 입력", key=key, placeholder="정답을 입력하세요", label_visibility="collapsed")
 
+
 # ----------------------------------------------------
 # 💡 메인 화면 렌더링
 # ----------------------------------------------------
@@ -39,13 +66,11 @@ def show_quiz_screen():
         {"id": "Q04", "imp": "R", "type": "빈칸채우기", "text": "완전경쟁시장에서 개별 기업은 가격 결정자가 아닌 가격 (      ) 이다.", "correct": "수용자", "source": "p.16 · 필기펜에서 추출", "exp": "개별 기업은 시장 가격을 그대로 받아들이는 수용자(Price Taker)입니다."}
     ]
 
-    # ⭐️ 상태 변수를 오직 'quiz_phase' 하나로 통일!
     if 'quiz_phase' not in st.session_state: 
-        st.session_state.quiz_phase = "first_attempt" # "first_attempt", "review", "retake"
+        st.session_state.quiz_phase = "first_attempt" 
 
     num_q = len(mock_questions)
     
-    # [제출 완료 상태]일 때만 점수 계산
     correct_count = 0
     score_percent = 0
     if st.session_state.quiz_phase == "review":
@@ -61,7 +86,6 @@ def show_quiz_screen():
     head_col1, head_col2 = st.columns([8, 2])
     
     with head_col1: 
-        # 상태별 뱃지(태그) HTML 생성
         if st.session_state.quiz_phase == "first_attempt":
             badge = "<span style='background:#E8F0FE; color:#1A73E8; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; margin-right:8px;'>문제 풀이</span>"
         elif st.session_state.quiz_phase == "retake":
@@ -69,7 +93,6 @@ def show_quiz_screen():
         else: # review
             badge = f"<span style='background:#E6F4EA; color:#1E8E3E; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; margin-right:8px;'>채점 완료 {correct_count}/{num_q}</span>"
             
-        # 문서 정보와 뱃지를 한 줄로 깔끔하게 렌더링
         st.markdown(f"<div style='margin-top: 15px; font-size: 16px;'>{badge} <b>경제학원론_3장.pdf</b> <span style='color: #888; font-size: 14px;'>· 총 {num_q}문항 · R 2 / O 1 / Y 1</span></div>", unsafe_allow_html=True)
             
     with head_col2:
@@ -107,19 +130,25 @@ def show_quiz_screen():
             # ==========================================
             if st.session_state.quiz_phase in ["first_attempt", "retake"]:
                 render_question_input(q, idx, prefix="ans")
-                
                 st.write("")
-                with st.expander("해설 보기 ▾"): 
-                    st.write(f"{q['exp']}")
+                
+                # ⭐️ 1. 컬럼 비율을 [12, 1] 혹은 [15, 1]로 확 줄입니다.
+                exp_col, fb_col = st.columns([12, 1]) 
+                with exp_col:
+                    with st.expander("해설 보기 ▾"): 
+                        st.write(f"{q['exp']}")
+                with fb_col:
+                    # ⭐️ 2. use_container_width=True 를 삭제합니다! (딱 이모지 크기만큼만 생성됨)
+                    if st.button("🚩", key=f"btn_fb_{q['id']}", help="문제 오류 신고 및 피드백 남기기"):
+                        show_feedback_dialog(q['id'])
                 
             # ==========================================
-            # Phase 2: 채점 결과 모드 (리뷰 전용) - 개별 다시 풀기 삭제! ✂️
+            # Phase 2: 채점 결과 모드 (리뷰 전용)
             # ==========================================
             elif st.session_state.quiz_phase == "review":
                 my_ans = st.session_state.get(f"ans_{idx}", "")
                 is_correct = (str(my_ans).strip() == q['correct'])
                 
-                # 내 답과 정답만 아주 직관적으로 비교해서 보여줌
                 ans_col1, ans_col2 = st.columns(2)
                 with ans_col1:
                     if is_correct: st.success(f"⭕ **나의 답:** &nbsp; {my_ans}")
@@ -128,23 +157,28 @@ def show_quiz_screen():
                     st.info(f"✅ **정답:** &nbsp; {q['correct']}")
                     
                 st.write("")
-                with st.expander("해설 보기 ▾", expanded=True): 
-                    st.write(f"{q['exp']}")
+                
+                # ⭐️ 여기도 똑같이 비율 조정 및 속성 삭제 적용
+                exp_col, fb_col = st.columns([12, 1])
+                with exp_col:
+                    with st.expander("해설 보기 ▾", expanded=True): 
+                        st.write(f"{q['exp']}")
+                with fb_col:
+                    if st.button("🚩", key=f"btn_fb_{q['id']}", help="문제 오류 신고 및 피드백 남기기"):
+                        show_feedback_dialog(q['id'])
 
     # ----------------------------------------------------
-    # 3. 최하단 제출 버튼 (Phase 별로 완벽 분리)
+    # 3. 최하단 제출 버튼
     # ----------------------------------------------------
     st.markdown("<hr>", unsafe_allow_html=True)
     
     if st.session_state.quiz_phase == "first_attempt":
         if st.button("채점", type="primary", use_container_width=True):
-            # 🚀 [오답노트 연동] 여기서만 백엔드 DB로 데이터가 날아갑니다!
             st.session_state.quiz_phase = "review"
             st.balloons()
             st.rerun()
             
     elif st.session_state.quiz_phase == "retake":
         if st.button("채점 (오답 노트 반영 X)", type="primary", use_container_width=True):
-            # 🚫 [로컬 채점] 여기서는 화면 상태만 바뀌고, 위쪽 루프에서 점수가 자동 재계산됩니다!
             st.session_state.quiz_phase = "review"
             st.rerun()
