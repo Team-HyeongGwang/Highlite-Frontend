@@ -1,0 +1,10 @@
+[theme]
+base="light"
+primaryColor="#FF4B4B"
+backgroundColor="#F8F9FA"
+secondaryBackgroundColor="#FFFFFF"
+textColor="#212529"
+font="sans serif"
+
+[server]
+runOnSave = true # 코드를 저장하면 화면이 자동으로 새로고침 되게 하는 옵션
