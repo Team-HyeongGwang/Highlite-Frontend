@@ -1,13 +1,50 @@
 import streamlit as st
+import requests
 
-# ----------------------------------------------------
-# 💡 [신규] 문제 피드백 모달 다이얼로그
-# ----------------------------------------------------
+BASE_URL = "http://127.0.0.1:8000"
+
+# ────────────────────────────────────────
+# 백엔드 응답 → 프론트 형식 변환
+# ────────────────────────────────────────
+def convert_question(q, idx):
+    type_map = {
+        "multiple_choice": "객관식",
+        "ox": "OX",
+        "fill_in_the_blank": "빈칸채우기"
+    }
+    priority_map = {1: "R", 2: "O", 3: "Y"}
+    source_map = {
+        "highlight": "형광펜에서 추출",
+        "pen": "필기펜에서 추출"
+    }
+
+    options_list = None
+    if q.get("options"):
+        options_list = [f"{k} {v}" for k, v in q["options"].items()]
+
+    return {
+        "id": f"Q{str(idx+1).zfill(2)}",
+        "imp": priority_map.get(q.get("priority", 3), "Y"),
+        "type": type_map.get(q.get("question_type"), "객관식"),
+        "text": q.get("question_text", ""),
+        "options": options_list,
+        "correct": q.get("answer", ""),
+        "source": f"p.{q.get('page_number', '?')} · {source_map.get(q.get('source_type', 'highlight'))}",
+        "exp": q.get("explanation", ""),
+        "chunk_id": q.get("chunk_id"),
+        "question_id": q.get("question_id"),
+        "question_type": q.get("question_type"),
+        "keywords": q.get("keywords", []),
+    }
+
+# ────────────────────────────────────────
+# 피드백 모달
+# ────────────────────────────────────────
 @st.dialog("이 문항에 오류가 있나요?")
-def show_feedback_dialog(q_id):
+def show_feedback_dialog(q_id, q):
     st.markdown(f"**{q_id}** 문항에 대한 피드백을 선택해주세요.")
-    
-    st.radio(
+
+    feedback_label = st.radio(
         "어떤 문제가 있나요?",
         options=[
             "문제가 애매해요",
@@ -18,29 +55,85 @@ def show_feedback_dialog(q_id):
         key=f"fb_type_{q_id}",
         label_visibility="collapsed"
     )
-    
-    st.write("")
-    st.text_area("상세 내용 (선택)", placeholder="어떤 부분이 이상한지 구체적으로 적어주시면 AI 에이전트 개선에 큰 도움이 됩니다!", key=f"fb_memo_{q_id}")
-    
-    if st.button("피드백 제출하기", type="primary", use_container_width=True):
-        st.toast(f"{q_id} 문항에 대한 피드백이 접수되었습니다. 감사합니다! 🙇‍♀️", icon="✅")
-        st.rerun()
 
-# ----------------------------------------------------
-# 💡 문제 유형별 렌더링 컴포넌트 (범용 설계)
-# ----------------------------------------------------
+    st.text_area(
+        "상세 내용 (선택)",
+        placeholder="어떤 부분이 이상한지 구체적으로 적어주시면 AI 에이전트 개선에 큰 도움이 됩니다!",
+        key=f"fb_memo_{q_id}"
+    )
+
+    if st.button("피드백 제출하기", type="primary", use_container_width=True):
+        feedback_map = {
+            "문제가 애매해요": "ambiguous",
+            "정답이 틀린 것 같아요": "wrong_answer",
+            "해설이 이해가 안 돼요": "unclear_explanation",
+            "문제가 내용과 관련 없어요": "irrelevant"
+        }
+
+        if "retry_counts" not in st.session_state:
+            st.session_state.retry_counts = {}
+
+        retry_count = st.session_state.retry_counts.get(q_id, 0)
+
+        if retry_count >= 3:
+            st.toast("재생성은 최대 3회까지만 가능합니다.", icon="⚠️")
+            return
+
+        try:
+            response = requests.post(
+                f"{BASE_URL}/question/regenerate",
+                json={
+                    "question_id": q["question_id"],
+                    "importance_id": 1,
+                    "context_text": q["text"],
+                    "keywords": q.get("keywords", []),
+                    "question_type": q["question_type"],
+                    "feedback_type": feedback_map[feedback_label],
+                    "retry_count": retry_count
+                }
+            )
+
+            if response.status_code == 200:
+                new_q = response.json()
+                for i, orig_q in enumerate(st.session_state.questions):
+                    if orig_q.get("question_id") == q["question_id"]:
+                        st.session_state.questions[i]["question_text"] = new_q["question_text"]
+                        st.session_state.questions[i]["options"] = new_q.get("options")
+                        st.session_state.questions[i]["answer"] = new_q["answer"]
+                        st.session_state.questions[i]["explanation"] = new_q["explanation"]
+                        break
+                st.session_state.retry_counts[q_id] = retry_count + 1
+                st.toast(f"{q_id} 문항이 재생성되었습니다!", icon="✅")
+                st.rerun()
+            elif response.status_code == 400:
+                st.toast("재생성은 최대 3회까지만 가능합니다.", icon="⚠️")
+            else:
+                st.toast("오류가 발생했습니다.", icon="❌")
+
+        except Exception as e:
+            st.toast(f"서버 연결 오류: {e}", icon="❌")
+
+# ────────────────────────────────────────
+# 문제 유형별 렌더링
+# ────────────────────────────────────────
 def render_question_input(q, idx, prefix):
     key = f"{prefix}_{idx}"
-    
+
     if q['type'] == "객관식":
-        return st.radio("보기", options=q['options'], key=key, index=None, label_visibility="collapsed")
-        
+        return st.radio(
+            "보기",
+            options=q['options'],
+            key=key,
+            index=None,
+            label_visibility="collapsed"
+        )
+
     elif q['type'] == "OX":
-        if key not in st.session_state: st.session_state[key] = None
+        if key not in st.session_state:
+            st.session_state[key] = None
         col1, col2 = st.columns(2)
         o_type = "primary" if st.session_state[key] == "O" else "secondary"
         x_type = "primary" if st.session_state[key] == "X" else "secondary"
-
         with col1:
             if st.button("O", key=f"{key}_btn_O", use_container_width=True, type=o_type):
                 st.session_state[key] = "O"
@@ -50,51 +143,67 @@ def render_question_input(q, idx, prefix):
                 st.session_state[key] = "X"
                 st.rerun()
         return st.session_state[key]
-        
+
     elif q['type'] == "빈칸채우기":
-        return st.text_input("정답 입력", key=key, placeholder="정답을 입력하세요", label_visibility="collapsed")
+        return st.text_input(
+            "정답 입력",
+            key=key,
+            placeholder="정답을 입력하세요",
+            label_visibility="collapsed"
+        )
 
-
-# ----------------------------------------------------
-# 💡 메인 화면 렌더링
-# ----------------------------------------------------
+# ────────────────────────────────────────
+# 메인 화면
+# ────────────────────────────────────────
 def show_quiz_screen():
-    mock_questions = [
-        {"id": "Q01", "imp": "R", "type": "객관식", "text": "수요의 가격탄력성이 1보다 클 때, 가격이 상승하면 총수입은 어떻게 변하는가?", "options": ["① 증가한다", "② 감소한다", "③ 변하지 않는다", "④ 알 수 없다"], "correct": "② 감소한다", "source": "p.13 · 형광펜에서 추출", "exp": "가격탄력성이 1보다 큰 경우(탄력적) 가격 상승 시 총수입은 감소합니다."},
-        {"id": "Q02", "imp": "O", "type": "OX", "text": "기회비용은 회계장부에 기록되는 명시적 비용만을 의미한다.", "options": ["O", "X"], "correct": "X", "source": "p.14 · 형광펜에서 추출", "exp": "기회비용은 명시적 비용 + 암묵적 비용을 모두 포함하므로 명시적 비용만 기록하는 회계장부 비용보다 일반적으로 큽니다."},
-        {"id": "Q03", "imp": "Y", "type": "OX", "text": "한계효용 체감의 법칙은 모든 재화에 항상 성립한다.", "options": ["O", "X"], "correct": "X", "source": "p.15 · 형광펜에서 추출", "exp": "중독성 재화 등 예외도 존재하므로 항상 성립하는 것은 아닙니다."},
-        {"id": "Q04", "imp": "R", "type": "빈칸채우기", "text": "완전경쟁시장에서 개별 기업은 가격 결정자가 아닌 가격 (      ) 이다.", "correct": "수용자", "source": "p.16 · 필기펜에서 추출", "exp": "개별 기업은 시장 가격을 그대로 받아들이는 수용자(Price Taker)입니다."}
+    if "questions" not in st.session_state or not st.session_state.questions:
+        st.warning("생성된 문제가 없습니다. 업로드 화면에서 문제를 먼저 생성해주세요.")
+        return
+
+    # 백엔드 형식 → 프론트 형식 변환
+    questions = [
+        convert_question(q, idx)
+        for idx, q in enumerate(st.session_state.questions)
     ]
 
-    if 'quiz_phase' not in st.session_state: 
-        st.session_state.quiz_phase = "first_attempt" 
+    # 세션 초기화
+    if 'quiz_phase' not in st.session_state:
+        st.session_state.quiz_phase = "first_attempt"
+    if 'retry_counts' not in st.session_state:
+        st.session_state.retry_counts = {}
 
-    num_q = len(mock_questions)
-    
+    num_q = len(questions)
+
+    # 채점 결과 계산
     correct_count = 0
     score_percent = 0
     if st.session_state.quiz_phase == "review":
-        for idx, q in enumerate(mock_questions):
-            my_ans = st.session_state.get(f"ans_{idx}", "")
-            if str(my_ans).strip() == q['correct']:
-                correct_count += 1
-        score_percent = int((correct_count / num_q) * 100)
+        quiz_result = st.session_state.get("quiz_result", {})
+        correct_count = quiz_result.get("correct", 0)
+        score_percent = int((correct_count / num_q) * 100) if num_q > 0 else 0
 
-    # ----------------------------------------------------
-    # 1. 상단 헤더 영역
-    # ----------------------------------------------------
+    # ────────────────────────────────────────
+    # 상단 헤더
+    # ────────────────────────────────────────
     head_col1, head_col2 = st.columns([8, 2])
-    
-    with head_col1: 
+
+    with head_col1:
         if st.session_state.quiz_phase == "first_attempt":
             badge = "<span style='background:#E8F0FE; color:#1A73E8; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; margin-right:8px;'>문제 풀이</span>"
         elif st.session_state.quiz_phase == "retake":
             badge = "<span style='background:#FCE8E6; color:#D93025; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; margin-right:8px;'>재풀이 (기록X)</span>"
-        else: # review
+        else:
             badge = f"<span style='background:#E6F4EA; color:#1E8E3E; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; margin-right:8px;'>채점 완료 {correct_count}/{num_q}</span>"
-            
-        st.markdown(f"<div style='margin-top: 15px; font-size: 16px;'>{badge} <b>경제학원론_3장.pdf</b> <span style='color: #888; font-size: 14px;'>· 총 {num_q}문항 · R 2 / O 1 / Y 1</span></div>", unsafe_allow_html=True)
-            
+
+        r_count = sum(1 for q in questions if q['imp'] == 'R')
+        o_count = sum(1 for q in questions if q['imp'] == 'O')
+        y_count = sum(1 for q in questions if q['imp'] == 'Y')
+
+        st.markdown(
+            f"<div style='margin-top: 15px; font-size: 16px;'>{badge} <b>문제 풀이</b> <span style='color: #888; font-size: 14px;'>· 총 {num_q}문항 · R {r_count} / O {o_count} / Y {y_count}</span></div>",
+            unsafe_allow_html=True
+        )
+
     with head_col2:
         if st.session_state.quiz_phase == "review":
             if st.button("다시 풀기 ↻", use_container_width=True):
@@ -103,82 +212,161 @@ def show_quiz_screen():
                         del st.session_state[key]
                 st.session_state.quiz_phase = "retake"
                 st.rerun()
-                
-    st.radio("필터", ["전체", "R 핵심만", "O 중요만", "Y 참고만"], horizontal=True, label_visibility="collapsed")
-    st.write("") 
-    
+
+    st.radio(
+        "필터",
+        ["전체", "R 핵심만", "O 중요만", "Y 참고만"],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+    st.write("")
+
     if st.session_state.quiz_phase == "review":
         st.success(f"총 {num_q}문제 중 **{correct_count}문제**를 맞혔습니다. (정답률 {score_percent}%)")
         st.write("")
 
-    # ----------------------------------------------------
-    # 2. 문제 렌더링 루프
-    # ----------------------------------------------------
-    for idx, q in enumerate(mock_questions):
+    # ────────────────────────────────────────
+    # 문제 렌더링
+    # ────────────────────────────────────────
+    for idx, q in enumerate(questions):
         with st.container(border=True):
             c1, c2 = st.columns([7, 3])
             with c1:
                 imp_class = f"tag-{q['imp'].lower()}"
-                st.markdown(f"**{q['id']}** &nbsp; <span class='{imp_class}'>{q['imp']}</span> &nbsp; <span class='tag-type'>{q['type']}</span>", unsafe_allow_html=True)
-            with c2: 
-                st.markdown(f"<div style='text-align: right; color: #888; font-size: 13px;'>{q['source']}</div>", unsafe_allow_html=True)
-            
-            st.markdown(f"<div style='margin-top: 15px; margin-bottom: 15px; font-size: 16px; color: var(--text-color);'>{q['text']}</div>", unsafe_allow_html=True)
-            
-            # ==========================================
-            # Phase 1 & 3: 실전 풀이 및 전체 다시 풀기 모드
-            # ==========================================
+                st.markdown(
+                    f"**{q['id']}** &nbsp; <span class='{imp_class}'>{q['imp']}</span> &nbsp; <span class='tag-type'>{q['type']}</span>",
+                    unsafe_allow_html=True
+                )
+            with c2:
+                st.markdown(
+                    f"<div style='text-align: right; color: #888; font-size: 13px;'>{q['source']}</div>",
+                    unsafe_allow_html=True
+                )
+
+            st.markdown(
+                f"<div style='margin-top: 15px; margin-bottom: 15px; font-size: 16px; color: var(--text-color);'>{q['text']}</div>",
+                unsafe_allow_html=True
+            )
+
+            # ── 풀이 모드 ──
             if st.session_state.quiz_phase in ["first_attempt", "retake"]:
                 render_question_input(q, idx, prefix="ans")
                 st.write("")
-                
-                # ⭐️ 1. 컬럼 비율을 [12, 1] 혹은 [15, 1]로 확 줄입니다.
-                exp_col, fb_col = st.columns([12, 1]) 
-                with exp_col:
-                    with st.expander("해설 보기 ▾"): 
-                        st.write(f"{q['exp']}")
-                with fb_col:
-                    # ⭐️ 2. use_container_width=True 를 삭제합니다! (딱 이모지 크기만큼만 생성됨)
-                    if st.button("🚩", key=f"btn_fb_{q['id']}", help="문제 오류 신고 및 피드백 남기기"):
-                        show_feedback_dialog(q['id'])
-                
-            # ==========================================
-            # Phase 2: 채점 결과 모드 (리뷰 전용)
-            # ==========================================
-            elif st.session_state.quiz_phase == "review":
-                my_ans = st.session_state.get(f"ans_{idx}", "")
-                is_correct = (str(my_ans).strip() == q['correct'])
-                
-                ans_col1, ans_col2 = st.columns(2)
-                with ans_col1:
-                    if is_correct: st.success(f"⭕ **나의 답:** &nbsp; {my_ans}")
-                    else: st.error(f"❌ **나의 답:** &nbsp; {my_ans if my_ans else '미입력'}")
-                with ans_col2:
-                    st.info(f"✅ **정답:** &nbsp; {q['correct']}")
-                    
-                st.write("")
-                
-                # ⭐️ 여기도 똑같이 비율 조정 및 속성 삭제 적용
+
                 exp_col, fb_col = st.columns([12, 1])
                 with exp_col:
-                    with st.expander("해설 보기 ▾", expanded=True): 
-                        st.write(f"{q['exp']}")
+                    with st.expander("해설 보기 ▾"):
+                        st.write(q['exp'])
                 with fb_col:
                     if st.button("🚩", key=f"btn_fb_{q['id']}", help="문제 오류 신고 및 피드백 남기기"):
-                        show_feedback_dialog(q['id'])
+                        show_feedback_dialog(q['id'], q)
 
-    # ----------------------------------------------------
-    # 3. 최하단 제출 버튼
-    # ----------------------------------------------------
+            # ── 채점 결과 모드 ──
+            elif st.session_state.quiz_phase == "review":
+                my_ans = st.session_state.get(f"ans_{idx}", "")
+
+                quiz_result = st.session_state.get("quiz_result", {})
+                results = {r["question_id"]: r for r in quiz_result.get("results", [])}
+                result = results.get(q["question_id"], {})
+                is_correct = result.get("is_correct", False)
+
+                ans_col1, ans_col2 = st.columns(2)
+                with ans_col1:
+                    if is_correct:
+                        st.success(f"⭕ **나의 답:** &nbsp; {my_ans}")
+                    else:
+                        st.error(f"❌ **나의 답:** &nbsp; {my_ans if my_ans else '미입력'}")
+                with ans_col2:
+                    st.info(f"✅ **정답:** &nbsp; {q['correct']}")
+
+                st.write("")
+
+                exp_col, fb_col = st.columns([12, 1])
+                with exp_col:
+                    with st.expander("해설 보기 ▾", expanded=True):
+                        st.write(q['exp'])
+                with fb_col:
+                    if st.button("🚩", key=f"btn_fb_{q['id']}", help="문제 오류 신고 및 피드백 남기기"):
+                        show_feedback_dialog(q['id'], q)
+
+    # ────────────────────────────────────────
+    # 하단 제출 버튼
+    # ────────────────────────────────────────
     st.markdown("<hr>", unsafe_allow_html=True)
-    
+
     if st.session_state.quiz_phase == "first_attempt":
         if st.button("채점", type="primary", use_container_width=True):
-            st.session_state.quiz_phase = "review"
-            st.balloons()
-            st.rerun()
-            
+            answers = []
+            for idx, q in enumerate(questions):
+                submitted = st.session_state.get(f"ans_{idx}", "")
+                if submitted is None:
+                    submitted = ""
+
+                # 객관식인 경우 앞의 번호(①②③④)만 추출
+                if q["type"] == "객관식" and submitted:
+                    submitted = submitted[0]  # "① 모델의 정확도" → "①"
+
+                answers.append({
+                    "question_id": q["question_id"],
+                    "submitted_answer": str(submitted)
+                })
+
+            try:
+                response = requests.post(
+                    f"{BASE_URL}/question/submit",
+                    json={
+                        "user_id": st.session_state.get("user_id", 1),
+                        "document_id": st.session_state.get("document_id", 1),
+                        "attempt_phase": "first_attempt",
+                        "answers": answers
+                    }
+                )
+
+                if response.status_code == 200:
+                    st.session_state.quiz_result = response.json()
+                    st.session_state.quiz_phase = "review"
+                    st.balloons()
+                    st.rerun()
+                else:
+                    st.error("채점 중 오류가 발생했습니다.")
+
+            except Exception as e:
+                st.error(f"서버 연결 오류: {e}")
+
     elif st.session_state.quiz_phase == "retake":
         if st.button("채점 (오답 노트 반영 X)", type="primary", use_container_width=True):
-            st.session_state.quiz_phase = "review"
-            st.rerun()
+            answers = []
+            for idx, q in enumerate(questions):
+                submitted = st.session_state.get(f"ans_{idx}", "")
+                if submitted is None:
+                    submitted = ""
+                    
+                # 객관식인 경우 앞의 번호(①②③④)만 추출
+                if q["type"] == "객관식" and submitted:
+                    submitted = submitted[0]  # "① 모델의 정확도" → "①"
+                    
+                answers.append({
+                    "question_id": q["question_id"],
+                    "submitted_answer": str(submitted)
+                })
+
+            try:
+                response = requests.post(
+                    f"{BASE_URL}/question/submit",
+                    json={
+                        "user_id": st.session_state.get("user_id", 1),
+                        "document_id": st.session_state.get("document_id", 1),
+                        "attempt_phase": "regenerated",
+                        "answers": answers
+                    }
+                )
+
+                if response.status_code == 200:
+                    st.session_state.quiz_result = response.json()
+                    st.session_state.quiz_phase = "review"
+                    st.rerun()
+                else:
+                    st.error("채점 중 오류가 발생했습니다.")
+
+            except Exception as e:
+                st.error(f"서버 연결 오류: {e}")
