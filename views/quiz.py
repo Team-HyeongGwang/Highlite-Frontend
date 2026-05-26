@@ -1,7 +1,7 @@
 import streamlit as st
 
 # ----------------------------------------------------
-# 💡 [신규] 문제 피드백 모달 다이얼로그
+# 💡 문제 피드백 모달 다이얼로그
 # ----------------------------------------------------
 @st.dialog("이 문항에 오류가 있나요?")
 def show_feedback_dialog(q_id):
@@ -27,7 +27,7 @@ def show_feedback_dialog(q_id):
         st.rerun()
 
 # ----------------------------------------------------
-# 💡 문제 유형별 렌더링 컴포넌트 (review.py와 동일한 스펙 적용)
+# 💡 문제 유형별 렌더링 컴포넌트 
 # ----------------------------------------------------
 def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
     key = f"{prefix}_{idx}"
@@ -124,7 +124,6 @@ def show_quiz_screen():
             my_ans = st.session_state.get(f"ans_{idx}", "")
             is_correct = (str(my_ans).strip() == q['correct']) if is_graded else False
             
-            # ⭐️ 채점 완료 시 번호 앞 O / X 아이콘 노출
             mark = ""
             if is_graded:
                 mark = "<span style='color: #28A745; font-size: 17px;'>⭕</span> " if is_correct else "<span style='color: #FF4B4B; font-size: 17px;'>❌</span> "
@@ -138,11 +137,9 @@ def show_quiz_screen():
             
             st.markdown(f"<div style='margin-top: 15px; margin-bottom: 15px; font-size: 16px; color: var(--text-color);'>{q['text']}</div>", unsafe_allow_html=True)
             
-            # ⭐️ 순정 문제 컴포넌트 + 채점 시 비활성화 
             render_question_input(q, idx, prefix="ans", is_disabled=is_graded)
             st.write("")
             
-            # ⭐️ 채점 완료 후 직관적인 정답 비교 피드백 (review.py 스타일)
             if is_graded:
                 ans_col1, ans_col2 = st.columns(2)
                 with ans_col1:
@@ -154,7 +151,6 @@ def show_quiz_screen():
                     st.info(f"✅ **정답:** &nbsp; {q['correct']}")
                 st.write("")
             
-            # ⭐️ 해설 & 피드백 플래그 (is_graded에 따라 자동 열림/닫힘 처리)
             exp_col, fb_col = st.columns([12, 1]) 
             with exp_col:
                 with st.expander("해설 보기 ▾", expanded=is_graded): 
