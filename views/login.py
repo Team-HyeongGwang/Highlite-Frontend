@@ -1,4 +1,3 @@
-# views/login.py
 import streamlit as st
 import requests
 
@@ -8,11 +7,10 @@ def show_login_screen():
     st.markdown('<div class="logo-text" style="text-align:center; font-size:40px; margin-top:50px;">Highlite</div>', unsafe_allow_html=True)
     st.markdown('<div class="logo-sub" style="text-align:center; margin-bottom:40px;">Just highlight, we\'ll do the rest.</div>', unsafe_allow_html=True)
     
-    # 가운데 정렬을 위해 껍데기 컬럼 사용
     _, col, _ = st.columns([1, 1, 1])
     
     with col:
-        # --- 1. 기존 자체 로그인 폼 ---
+        # --- 자체 로그인 폼 ---
         with st.form("login_form"):
             email = st.text_input("이메일")
             password = st.text_input("비밀번호", type="password")
@@ -30,14 +28,13 @@ def show_login_screen():
                     data = response.json()
                     st.session_state["access_token"] = data.get("access")
                     st.session_state["user_info"] = data.get("user")
-                    st.rerun() # 성공 시 새로고침하여 메인 화면으로 이동
+                    st.rerun() 
                 else:
                     st.error("로그인 실패: 이메일이나 비밀번호를 확인해주세요.")
             except:
                 st.error("서버와 연결할 수 없습니다. 백엔드 서버가 켜져 있는지 확인해주세요.")
 
         # --- 2. 소셜 로그인 (구글) 버튼 추가 ---
-        # 구분선 역할 (또는)
         st.markdown("""
             <div style="text-align: center; margin: 20px 0px 15px 0px; color: #adb5bd; font-size: 13px;">
                 또는

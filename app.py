@@ -12,7 +12,7 @@ from views.mypage import show_mypage_screen
 
 from utils import color_options, add_rank, remove_rank
 
-# --- 페이지 설정 및 CSS ---
+# 페이지 설정 및 CSS
 st.set_page_config(layout="wide", page_title="Highlite | 1타 강사 AI")
 
 st.markdown("""
@@ -35,9 +35,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# ⭐️ [핵심] URL에서 구글 로그인 토큰 낚아채서 진짜 정보 풀기!
-# ==========================================
+# URL에서 구글 로그인 토큰 낚아채서 진짜 정보 풀기
 if "token" in st.query_params:
     token = st.query_params["token"]
     st.session_state["access_token"] = token
@@ -60,16 +58,14 @@ if "token" in st.query_params:
     st.query_params.clear()
     st.rerun()
 
-# ==========================================
-# ⭐️ [문지기] 로그인 여부 확인
-# ==========================================
+# 로그인 여부 확인
 is_logged_in = "access_token" in st.session_state
 
-# 🚫 로그인 안 했으면 로그인 화면(views/login.py)만 렌더링!
+# 로그인 안 했으면 로그인 화면(views/login.py)만 렌더링
 if not is_logged_in:
     show_login_screen()
 
-# ✅ 로그인 성공했으면 메인 뷰 렌더링!
+# 로그인 성공했으면 메인 뷰 렌더링
 else:
     # --- 세션 상태 초기화 ---
     if 'hl_ranks' not in st.session_state: 
@@ -190,13 +186,13 @@ else:
             
         st.markdown("<hr style='margin: 25px 0; border-color: rgba(151,151,151,0.2);'>", unsafe_allow_html=True)
         
-        # ⭐️ 로그인된 유저 정보로 그리기
+        # 로그인된 유저 정보로 그리기
         user = st.session_state.get("user_info", {})
         username = user.get("username", "김학생")
         email = user.get("email", "student@email.com")
-        profile_image_url = user.get("profile_image_url") # ⭐️ 사진 주소 가져오기
+        profile_image_url = user.get("profile_image_url") 
 
-        # 사진이 있으면 이미지 태그를, 없으면 이모지를 보여줍니다.
+        # 사진이 있으면 이미지 태그를, 없으면 이모지를 보여줌
         if profile_image_url:
             avatar_html = f"<img src='{profile_image_url}' style='width: 44px; height: 44px; border-radius: 50%; border: 1px solid #E9ECEF;'>"
         else:
@@ -214,7 +210,6 @@ else:
         </div>
         """, unsafe_allow_html=True)
         
-        # ⭐️ 프로필 창 옆에 로그아웃 버튼을 살짝 추가
         btn_col1, btn_col2 = st.columns([5, 5])
         with btn_col1:
             if st.button("마이페이지", use_container_width=True):
