@@ -8,6 +8,50 @@ def show_mypage_screen():
     profile_image_url = user.get("profile_image_url")
     join_date = user.get("join_date", "2026.05.26") 
 
+    # 로그아웃 확인 팝업
+    @st.dialog("로그아웃")
+    def confirm_logout_dialog():
+        st.write("로그아웃 하시겠습니까?")
+        st.write("")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("취소", use_container_width=True):
+                st.rerun() 
+        with c2:
+            if st.button("로그아웃", type="primary", use_container_width=True):
+                del st.session_state["access_token"]
+                del st.session_state["user_info"]
+                st.session_state.show_mypage = False
+                st.rerun()
+
+    # 탈퇴 확인 팝업
+    @st.dialog("⚠️ 회원 탈퇴 확인")
+    def confirm_delete_dialog():
+        st.error("정말로 탈퇴하시겠습니까? 모든 문서, 문제, 오답 기록이 영구적으로 삭제되며 복구할 수 없습니다.")
+        st.write("")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("취소", use_container_width=True):
+                st.rerun() 
+        with c2:
+            if st.button("네, 탈퇴합니다", type="primary", use_container_width=True):
+                try:
+                    response = requests.delete("http://localhost:8000/users/account", json={"email": email})
+                    
+                    if response.status_code == 200:
+                        st.toast("회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.", icon="👋")
+                        del st.session_state["access_token"]
+                        del st.session_state["user_info"]
+                        st.session_state.show_mypage = False
+                        st.rerun()
+                    else:
+                        st.error("탈퇴 처리 중 오류가 발생했습니다.")
+                except Exception as e:
+                    st.error("서버와 연결할 수 없습니다.")
+
+
     if st.button("← 홈으로 돌아가기"):
         st.session_state.show_mypage = False
         st.rerun()
@@ -51,7 +95,6 @@ def show_mypage_screen():
         with nc2: 
             if st.button("수정", key="edit_name", use_container_width=True):
                 try:
-                    # 백엔드로 변경 요청 보내기
                     response = requests.put("http://localhost:8000/users/nickname", json={"email": email, "new_nickname": new_name})
                     if response.status_code == 200:
                         st.session_state["user_info"]["username"] = new_name
@@ -88,11 +131,9 @@ def show_mypage_screen():
             st.caption("이 기기에서 로그아웃합니다")
         with lc2:
             st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+            
             if st.button("로그아웃", use_container_width=True):
-                del st.session_state["access_token"]
-                del st.session_state["user_info"]
-                st.session_state.show_mypage = False
-                st.rerun()
+                confirm_logout_dialog()
 
     st.write("")
 
@@ -106,17 +147,4 @@ def show_mypage_screen():
             st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
             
             if st.button("탈퇴", type="primary", use_container_width=True):
-                try:
-                    # 백엔드의 /users/account로 DELETE 요청 보내기
-                    response = requests.delete("http://localhost:8000/users/account", json={"email": email})
-                    
-                    if response.status_code == 200:
-                        st.toast("회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.", icon="👋")
-                        del st.session_state["access_token"]
-                        del st.session_state["user_info"]
-                        st.session_state.show_mypage = False
-                        st.rerun()
-                    else:
-                        st.error("탈퇴 처리 중 오류가 발생했습니다.")
-                except Exception as e:
-                    st.error("서버와 연결할 수 없습니다.")
+                confirm_delete_dialog()
