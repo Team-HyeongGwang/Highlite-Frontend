@@ -55,7 +55,7 @@ def show_mypage_screen():
                     response = requests.put("http://localhost:8000/users/nickname", json={"email": email, "new_nickname": new_name})
                     if response.status_code == 200:
                         st.session_state["user_info"]["username"] = new_name
-                        st.toast("닉네임이 성공적으로 변경되었습니다! ✅")
+                        st.toast("닉네임이 변경되었습니다.")
                         st.rerun()
                     else:
                         st.error("닉네임 변경 실패")
