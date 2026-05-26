@@ -23,7 +23,6 @@ def show_mypage_screen():
         
         with c1:
             if profile_image_url:
-                # 불필요한 여백(margin-bottom) 제거
                 st.markdown(f"""
                 <div style='display: flex; justify-content: center;'>
                     <img src="{profile_image_url}" style='width: 64px; height: 64px; border-radius: 50%; border: 1px solid #E9ECEF;'>
@@ -112,13 +111,10 @@ def show_mypage_screen():
                     response = requests.delete("http://localhost:8000/users/account", json={"email": email})
                     
                     if response.status_code == 200:
-                        # 1. 탈퇴 성공 안내
                         st.toast("회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.", icon="👋")
-                        # 2. 내 컴퓨터(세션)에 남아있는 로그인 정보 완전 삭제
                         del st.session_state["access_token"]
                         del st.session_state["user_info"]
                         st.session_state.show_mypage = False
-                        # 3. 화면 새로고침해서 로그인 창으로 쫓아내기!
                         st.rerun()
                     else:
                         st.error("탈퇴 처리 중 오류가 발생했습니다.")
