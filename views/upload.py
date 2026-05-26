@@ -1,10 +1,8 @@
-# views/upload.py
 import streamlit as st
 
 def show_upload_screen():
     from utils import color_options, add_rank, remove_rank
 
-    # --- 💎 완벽한 앱 디자인을 위한 커스텀 CSS ---
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,800;1,800&display=swap');
@@ -14,7 +12,6 @@ def show_upload_screen():
         .highlight-text { background: linear-gradient(180deg, rgba(255,255,255,0) 55%, #FFD700 55%); padding: 0 6px; display: inline-block; font-size: 52px; font-style: italic; line-height: 1; margin-right: 2px; }
         .hero-subtitle { font-size: 16px; text-align: center; color: #888; margin-bottom: 50px; font-weight: 500; }
         
-        /* ⭐️ [개발자 티 탈출] 세련된 스텝(Step) 헤더 디자인 */
         .step-container { display: flex; align-items: center; margin-top: 30px; margin-bottom: 12px; }
         .step-number { 
             background-color: #FF4B4B; /* 포인트 컬러 */
@@ -28,10 +25,8 @@ def show_upload_screen():
         }
         .step-title-text { font-size: 19px; font-weight: 800; color: var(--text-color); letter-spacing: -0.5px; }
         
-        /* ⭐️ 스텝 아래쪽 설명문 여백 맞춤 (동그라미 너비만큼 들여쓰기) */
         .step-desc { font-size: 14px; color: #777; margin-left: 38px; margin-bottom: 15px; }
         
-        /* ⭐️ 순위 뱃지 디자인 (회색 배경으로 모던하게) */
         .rank-label-container { display: flex; align-items: center; margin-top: 10px; margin-bottom: 5px; }
         .rank-badge {
             background-color: #F1F3F5; color: #495057; border: 1px solid #DEE2E6;
@@ -41,8 +36,6 @@ def show_upload_screen():
         }
         .rank-text { font-size: 14px; font-weight: 700; color: #343A40; }
         
-        /* 기본 디바이더 스타일 연하게 조절 */
-        hr { margin: 30px 0 !important; border-color: rgba(151,151,151,0.2) !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -79,7 +72,7 @@ def show_upload_screen():
             st.write("**별도 필기본**")
             st.file_uploader("별도 필기본 업로드", key="double_up_2", accept_multiple_files=True, label_visibility="collapsed")
             
-    st.markdown("<hr>", unsafe_allow_html=True) # 구분선
+    st.markdown("<hr style='margin: 30px 0; border-color: rgba(151,151,151,0.2);'>", unsafe_allow_html=True)
     
     # ==========================================
     # [Step 2] 문제 수 설정
@@ -93,7 +86,7 @@ def show_upload_screen():
     
     st.selectbox("수", [10, 15, 20, 25, 30, 35, 40, 45, 50], index=2, label_visibility="collapsed")
     
-    st.markdown("<hr>", unsafe_allow_html=True) # 구분선
+    st.markdown("<hr style='margin: 30px 0; border-color: rgba(151,151,151,0.2);'>", unsafe_allow_html=True)
     
     # ==========================================
     # [Step 3] 중요도 색상 설정
@@ -116,7 +109,6 @@ def show_upload_screen():
         
         for i in range(len(st.session_state.hl_ranks)):
             label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
-            # ⭐️ 모던해진 순위 뱃지 UI 적용
             st.markdown(f"<div class='rank-label-container'><div class='rank-badge'>{i+1}</div><div class='rank-text'>{label}</div></div>", unsafe_allow_html=True)
             st.session_state.hl_ranks[i] = st.selectbox(
                 f"형광펜 {i+1}순위", color_options, 
@@ -133,7 +125,6 @@ def show_upload_screen():
         
         for i in range(len(st.session_state.pen_ranks)):
             label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
-            # ⭐️ 모던해진 순위 뱃지 UI 적용
             st.markdown(f"<div class='rank-label-container'><div class='rank-badge'>{i+1}</div><div class='rank-text'>{label}</div></div>", unsafe_allow_html=True)
             st.session_state.pen_ranks[i] = st.selectbox(
                 f"필기펜 {i+1}순위", color_options, 
