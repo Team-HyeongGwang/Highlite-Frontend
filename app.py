@@ -1,6 +1,13 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
 import jwt
+import time
+from streamlit_cookies_controller import CookieController
+
+# 페이지 설정 및 CSS
+st.set_page_config(layout="wide", page_title="Highlite | 1타 강사 AI")
+
+cookie_controller = CookieController()
 
 from views.login import show_login_screen
 from views.upload import show_upload_screen
@@ -11,9 +18,6 @@ from views.export import show_export_screen
 from views.mypage import show_mypage_screen
 
 from utils import color_options, add_rank, remove_rank
-
-# 페이지 설정 및 CSS
-st.set_page_config(layout="wide", page_title="Highlite | 1타 강사 AI")
 
 st.markdown("""
 <style>
@@ -35,7 +39,29 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# URL에서 구글 로그인 토큰 낚아채서 진짜 정보 풀기
+if st.session_state.get("pending_logout"):
+    cookie_controller.remove("highlite_token")
+    del st.session_state["pending_logout"]
+
+if "pending_login_token" in st.session_state:
+    cookie_controller.set("highlite_token", st.session_state["pending_login_token"], max_age=86400)
+    del st.session_state["pending_login_token"]
+
+if "access_token" not in st.session_state:
+    cookie_token = cookie_controller.get("highlite_token")
+    if cookie_token:
+        st.session_state["access_token"] = cookie_token
+        try:
+            decoded = jwt.decode(cookie_token, options={"verify_signature": False})
+            st.session_state["user_info"] = {
+                "username": decoded.get("username", "유저"),
+                "email": decoded.get("sub", "이메일 없음"),
+                "profile_image_url": decoded.get("picture"),
+                "join_date": decoded.get("join_date", "2026.05.26")
+            }
+        except Exception:
+            pass
+
 if "token" in st.query_params:
     token = st.query_params["token"]
     st.session_state["access_token"] = token
@@ -46,28 +72,22 @@ if "token" in st.query_params:
             "username": decoded.get("username", "이름 없음"),
             "email": decoded.get("sub", "이메일 없음"),
             "profile_image_url": decoded.get("picture"),
-            "join_date": decoded.get("join_date", "2026.05.26") # ⭐️ 토큰 가방에서 가입일 꺼내기!
+            "join_date": decoded.get("join_date", "2026.05.26")
         }
-    except Exception as e:
-        st.session_state["user_info"] = {
-            "username": "유저", 
-            "email": "user@email.com",
-            "join_date": "2026.05.26"
-        }
+    except Exception:
+        pass
         
+    cookie_controller.set("highlite_token", token, max_age=86400)
     st.query_params.clear()
+    time.sleep(0.5)
     st.rerun()
 
-# 로그인 여부 확인
 is_logged_in = "access_token" in st.session_state
 
-# 로그인 안 했으면 로그인 화면(views/login.py)만 렌더링
 if not is_logged_in:
     show_login_screen()
 
-# 로그인 성공했으면 메인 뷰 렌더링
 else:
-    # --- 세션 상태 초기화 ---
     if 'hl_ranks' not in st.session_state: 
         st.session_state.hl_ranks = ["🟨 노랑"]
     if 'pen_ranks' not in st.session_state: 
@@ -80,7 +100,6 @@ else:
             {"id": 2, "name": "미시경제_챕터4_수정.pdf", "date": "어제", "count": 1, "q_num": 14, "score": "92%"}
         ]
 
-    # --- 컬러 뱃지 생성 함수 ---
     color_hex = {
         "🟨 노랑": ("#FFC107", "#000000"),
         "🟥 빨강": ("#FF4B4B", "#FFFFFF"),
@@ -216,8 +235,14 @@ else:
                 st.session_state.show_mypage = True
         with btn_col2:
             if st.button("로그아웃", use_container_width=True):
-                del st.session_state["access_token"]
-                del st.session_state["user_info"]
+                if "access_token" in st.session_state:
+                    del st.session_state["access_token"]
+                if "user_info" in st.session_state:
+                    del st.session_state["user_info"]
+                
+                st.session_state["pending_logout"] = True 
+                
+                st.session_state.show_mypage = False
                 st.rerun()
 
     # ==========================================

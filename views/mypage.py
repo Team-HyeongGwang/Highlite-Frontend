@@ -20,8 +20,13 @@ def show_mypage_screen():
                 st.rerun() 
         with c2:
             if st.button("로그아웃", type="primary", use_container_width=True):
-                del st.session_state["access_token"]
-                del st.session_state["user_info"]
+                if "access_token" in st.session_state:
+                    del st.session_state["access_token"]
+                if "user_info" in st.session_state:
+                    del st.session_state["user_info"]
+                
+                st.session_state["pending_logout"] = True 
+                
                 st.session_state.show_mypage = False
                 st.rerun()
 
