@@ -136,7 +136,7 @@ else:
     # 1. 왼쪽 사이드바 (내비게이션)
     # ==========================================
     with st.sidebar:
-        st.markdown('<div class="logo-text">highlite</div>', unsafe_allow_html=True)
+        st.markdown('<div class="logo-text">Highlite</div>', unsafe_allow_html=True)
         st.markdown('<div class="logo-sub">Just highlight, we\'ll do the rest.</div>', unsafe_allow_html=True)
         
         menu = option_menu(
