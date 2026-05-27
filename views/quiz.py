@@ -1,10 +1,73 @@
 import streamlit as st
+import requests
+
+BASE_URL = "http://127.0.0.1:8000"
+
+# ----------------------------------------------------
+# 백엔드 응답 → 프론트 형식 변환
+# ----------------------------------------------------
+def convert_question(q, idx):
+    type_map = {
+        "multiple_choice": "객관식",
+        "ox": "OX",
+        "fill_in_the_blank": "빈칸채우기"
+    }
+    priority_map = {1: "R", 2: "O", 3: "Y"}
+    source_map = {
+        "highlight": "형광펜에서 추출",
+        "pen": "필기펜에서 추출"
+    }
+
+    options_list = None
+    if q.get("options"):
+        options_list = [f"{k} {v}" for k, v in q["options"].items()]
+
+    return {
+        "id": f"Q{str(idx+1).zfill(2)}",
+        "imp": priority_map.get(q.get("priority", 3), "Y"),
+        "type": type_map.get(q.get("question_type"), "객관식"),
+        "text": q.get("question_text", ""),
+        "options": options_list,
+        "correct": q.get("answer", ""),
+        "source": f"p.{q.get('page_number', '?')} · {source_map.get(q.get('source_type', 'highlight'))}",
+        "exp": q.get("explanation", ""),
+        "question_id": q.get("question_id"),
+        "question_type": q.get("question_type"),
+        "keywords": q.get("keywords", []),
+    }
+
+
+# ----------------------------------------------------
+# personalized/submit-session 호출
+# ----------------------------------------------------
+def submit_personalized(questions, attempt_phase):
+    for idx, q in enumerate(questions):
+        my_ans = st.session_state.get(f"ans_{idx}", "") or ""
+        if q["type"] == "객관식" and my_ans:
+            my_ans = my_ans[0]
+        is_correct = str(my_ans).strip() == str(q["correct"]).strip()
+
+        try:
+            requests.post(
+                f"{BASE_URL}/personalized/submit-session",
+                json={
+                    "user_id": st.session_state.get("user_id", 1),
+                    "group_id": st.session_state.get("group_id", "string"),
+                    "question_id": q["question_id"],
+                    "user_answer": str(my_ans),
+                    "is_correct": is_correct,
+                    "attempt_phase": attempt_phase,
+                }
+            )
+        except Exception:
+            pass
+
 
 # ----------------------------------------------------
 # 💡 문제 피드백 모달 다이얼로그
 # ----------------------------------------------------
 @st.dialog("이 문항에 오류가 있나요?")
-def show_feedback_dialog(q_id):
+def show_feedback_dialog(q_id, q):
     st.markdown(f"**{q_id}** 문항에 대한 피드백을 선택해주세요.")
     
     st.radio(
@@ -61,25 +124,24 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
 # 💡 메인 퀴즈 화면 렌더링
 # ----------------------------------------------------
 def show_quiz_screen():
-    mock_questions = [
-        {"id": "Q01", "imp": "R", "type": "객관식", "text": "수요의 가격탄력성이 1보다 클 때, 가격이 상승하면 총수입은 어떻게 변하는가?", "options": ["① 증가한다", "② 감소한다", "③ 변하지 않는다", "④ 알 수 없다"], "correct": "② 감소한다", "source": "p.13 · 형광펜에서 추출", "exp": "가격탄력성이 1보다 큰 경우(탄력적) 가격 상승 시 총수입은 감소합니다."},
-        {"id": "Q02", "imp": "O", "type": "OX", "text": "기회비용은 회계장부에 기록되는 명시적 비용만을 의미한다.", "options": ["O", "X"], "correct": "X", "source": "p.14 · 형광펜에서 추출", "exp": "기회비용은 명시적 비용 + 암묵적 비용을 모두 포함하므로 명시적 비용만 기록하는 회계장부 비용보다 일반적으로 큽니다."},
-        {"id": "Q03", "imp": "Y", "type": "OX", "text": "한계효용 체감의 법칙은 모든 재화에 항상 성립한다.", "options": ["O", "X"], "correct": "X", "source": "p.15 · 형광펜에서 추출", "exp": "중독성 재화 등 예외도 존재하므로 항상 성립하는 것은 아닙니다."},
-        {"id": "Q04", "imp": "R", "type": "빈칸채우기", "text": "완전경쟁시장에서 개별 기업은 가격 결정자가 아닌 가격 (      ) 이다.", "correct": "수용자", "source": "p.16 · 필기펜에서 추출", "exp": "개별 기업은 시장 가격을 그대로 받아들이는 수용자(Price Taker)입니다."}
-    ]
+    if "questions" not in st.session_state or not st.session_state.questions:
+        st.warning("생성된 문제가 없습니다. 업로드 화면에서 문제를 먼저 생성해주세요.")
+        return
 
-    if 'quiz_phase' not in st.session_state: 
-        st.session_state.quiz_phase = "first_attempt" 
+    questions = [convert_question(q, idx) for idx, q in enumerate(st.session_state.questions)]
 
-    num_q = len(mock_questions)
+    if 'quiz_phase' not in st.session_state:
+        st.session_state.quiz_phase = "first_attempt"
+
+    num_q = len(questions)
     
     # 채점 로직
     correct_count = 0
     score_percent = 0
     if st.session_state.quiz_phase == "review":
-        for idx, q in enumerate(mock_questions):
+        for idx, q in enumerate(questions):
             my_ans = st.session_state.get(f"ans_{idx}", "")
-            if str(my_ans).strip() == q['correct']:
+            if str(my_ans).strip() == str(q['correct']).strip():
                 correct_count += 1
         score_percent = int((correct_count / num_q) * 100)
 
@@ -118,11 +180,11 @@ def show_quiz_screen():
     # ----------------------------------------------------
     # 2. 문제 렌더링 루프
     # ----------------------------------------------------
-    for idx, q in enumerate(mock_questions):
+    for idx, q in enumerate(questions):
         with st.container(border=True):
             is_graded = (st.session_state.quiz_phase == "review")
             my_ans = st.session_state.get(f"ans_{idx}", "")
-            is_correct = (str(my_ans).strip() == q['correct']) if is_graded else False
+            is_correct = (str(my_ans).strip() == str(q['correct']).strip()) if is_graded else False
             
             mark = ""
             if is_graded:
@@ -157,7 +219,7 @@ def show_quiz_screen():
                     st.write(f"{q['exp']}")
             with fb_col:
                 if st.button("🚩", key=f"btn_fb_{q['id']}_{st.session_state.quiz_phase}", help="문제 오류 신고 및 피드백 남기기"):
-                    show_feedback_dialog(q['id'])
+                    show_feedback_dialog(q['id'], q)
 
     # ----------------------------------------------------
     # 3. 최하단 제출 버튼
@@ -166,11 +228,13 @@ def show_quiz_screen():
     
     if st.session_state.quiz_phase == "first_attempt":
         if st.button("채점", type="primary", use_container_width=True):
+            submit_personalized(questions, "first_attempt")
             st.session_state.quiz_phase = "review"
             st.balloons()
             st.rerun()
-            
+
     elif st.session_state.quiz_phase == "retake":
         if st.button("채점 (오답 노트 반영 X)", type="primary", use_container_width=True):
+            submit_personalized(questions, "re_attempt")
             st.session_state.quiz_phase = "review"
             st.rerun()
