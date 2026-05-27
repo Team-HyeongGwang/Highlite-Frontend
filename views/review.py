@@ -1,8 +1,49 @@
 import streamlit as st
 
+# ----------------------------------------------------
+# 💡 문제 유형별 렌더링 컴포넌트 
+# ----------------------------------------------------
+def render_question_input(q, q_id, prefix, is_disabled=False, prefill_ans=None):
+    key = f"{prefix}_{q_id}"
+    
+    if key not in st.session_state: 
+        st.session_state[key] = prefill_ans
+
+    if q['type'] == "객관식":
+        return st.radio("보기", options=q.get('options', []), key=key, label_visibility="collapsed", disabled=is_disabled)
+        
+    elif q['type'] == "OX":
+        col1, col2 = st.columns(2)
+        o_type = "primary" if st.session_state.get(key) == "O" else "secondary"
+        x_type = "primary" if st.session_state.get(key) == "X" else "secondary"
+
+        with col1:
+            if st.button("O", key=f"{key}_btn_O", use_container_width=True, type=o_type, disabled=is_disabled):
+                st.session_state[key] = "O"
+                st.rerun()
+        with col2:
+            if st.button("X", key=f"{key}_btn_X", use_container_width=True, type=x_type, disabled=is_disabled):
+                st.session_state[key] = "X"
+                st.rerun()
+        return st.session_state.get(key)
+        
+    elif q['type'] == "빈칸채우기":
+        return st.text_input("정답 입력", key=key, placeholder="정답을 입력하세요", label_visibility="collapsed", disabled=is_disabled)
+
+
 def show_review_screen():
+    # --- 상태(State) 관리 초기화 ---
     if 'selected_review_id' not in st.session_state:
         st.session_state.selected_review_id = None
+    if 'retry_mode_active' not in st.session_state:
+        st.session_state.retry_mode_active = False
+    if 'retry_graded' not in st.session_state:
+        st.session_state.retry_graded = False
+
+    # ✅ 회차별 해결된 문제 ID를 저장하는 딕셔너리
+    # { "rev_101": {"Q02", "Q05"}, ... }
+    if 'resolved_questions' not in st.session_state:
+        st.session_state.resolved_questions = {}
 
     # 💡 [가짜 데이터]
     if 'grouped_reviews' not in st.session_state:
@@ -10,7 +51,6 @@ def show_review_screen():
             {
                 "id": "doc_1", "title": "경제학원론_3장.pdf", "total_count": 3,
                 "attempts": [
-                    # ⭐️ 3회차는 다 맞았지만(wrong: 0), 테스트를 위해 원본 데이터에는 남겨둡니다.
                     {"id": "rev_103", "round": 3, "date": "방금 전", "total": 18, "correct": 18, "wrong": 0},
                     {"id": "rev_102", "round": 2, "date": "오늘 16:00", "total": 18, "correct": 15, "wrong": 3},
                     {"id": "rev_101", "round": 1, "date": "오늘 14:35", "total": 18, "correct": 14, "wrong": 4}
@@ -19,28 +59,24 @@ def show_review_screen():
             {
                 "id": "doc_2", "title": "미시경제_챕터4_수정.pdf", "total_count": 1,
                 "attempts": [
-                    {"id": "rev_104", "round": 1, "date": "어제 20:00", "total": 14, "correct": 14, "wrong": 0} # ⭐️ 전부 다 맞은 폴더
+                    {"id": "rev_104", "round": 1, "date": "어제 20:00", "total": 14, "correct": 14, "wrong": 0} 
                 ]
             }
         ]
 
     # ==========================================
-    # ⭐️ 개선 1: 오답이 0개인 기록을 사전에 싹 걸러내는 필터링 로직
+    # 필터링 로직 (오답이 있는 회차만)
     # ==========================================
     filtered_reviews = []
     for file in st.session_state.grouped_reviews:
-        # wrong이 1개 이상인(틀린 문제가 있는) 회차만 솎아냅니다.
         wrong_attempts = [a for a in file['attempts'] if a['wrong'] > 0]
-        
-        # 걸러내고 난 뒤, 오답 기록이 1개라도 존재하는 폴더만 화면에 보여줍니다.
         if len(wrong_attempts) > 0:
             new_file = file.copy()
             new_file['attempts'] = wrong_attempts
             filtered_reviews.append(new_file)
 
-
     # ==========================================
-    # [화면 A] 오답 보기 상세 화면
+    # [화면 A] 오답 보기 상세 화면 & [화면 C] 다시 풀기 모드
     # ==========================================
     if st.session_state.selected_review_id is not None:
         selected_file = None
@@ -52,21 +88,7 @@ def show_review_screen():
                     selected_attempt = a
                     break
             if selected_file: break
-        
-        btn_c1, btn_space, btn_c2 = st.columns([2, 6, 2.5])
-        with btn_c1:
-            if st.button("← 목록으로 돌아가기"):
-                st.session_state.selected_review_id = None
-                st.rerun()
-        with btn_c2:
-            if st.button("오답 다시 풀기 ↻", type="primary", use_container_width=True):
-                st.toast("선택한 오답 문제들을 다시 풉니다!", icon="✏️")
-                
-        st.write("")
-        st.markdown(f"### {selected_file['title']} <span style='font-size: 20px; color: #888;'>({selected_attempt['round']}회차)</span> 오답 노트", unsafe_allow_html=True)
-        st.caption(f"총 {selected_attempt['wrong']}개의 오답을 모아봤습니다. 취약점을 완벽하게 보완해 보세요!")
-        st.divider()
-
+            
         mock_wrong_questions = [
             {
                 "id": "Q02", "imp": "O", "type": "OX", 
@@ -85,32 +107,219 @@ def show_review_screen():
             }
         ]
 
-        for q in mock_wrong_questions:
+        # 현재 회차의 해결된 문제 ID 집합
+        attempt_id = st.session_state.selected_review_id
+        resolved_set = st.session_state.resolved_questions.get(attempt_id, set())
+
+        # ------------------------------------------
+        # [화면 C] 오답 다시 풀기 모드가 켜졌을 때
+        # ------------------------------------------
+        if st.session_state.retry_mode_active:
+            btn_c1, _ = st.columns([3, 7])
+            with btn_c1:
+                if st.button("← 돌아가기"):
+                    st.session_state.retry_mode_active = False
+                    st.session_state.retry_graded = False
+                    st.rerun()
+
+            st.write("")
+            st.markdown("### 📝 오답 다시 풀기", unsafe_allow_html=True)
+
+            # ✅ 아직 해결되지 않은 문제만 다시 풀기 대상으로 필터링
+            retry_questions = [q for q in mock_wrong_questions if q['id'] not in resolved_set]
+
+            if len(retry_questions) == 0:
+                st.success("🎉 모든 오답 문제를 해결했습니다! 완벽하게 보완했어요.")
+                st.write("")
+                if st.button("오답 노트로 돌아가기", type="primary"):
+                    st.session_state.retry_mode_active = False
+                    st.session_state.retry_graded = False
+                    st.rerun()
+                return
+
+            remaining = len(retry_questions)
+            total_wrong = len(mock_wrong_questions)
+            solved_count = len(resolved_set)
+
+            if solved_count > 0:
+                st.caption(f"전체 {total_wrong}문제 중 {solved_count}문제 해결 완료 · 남은 문제 {remaining}개")
+            else:
+                st.caption("틀렸던 문제들을 다시 풀어보며 취약점을 완벽하게 보완해 보세요!")
+            st.divider()
+
+            is_graded = st.session_state.retry_graded
+            correct_count = 0
+            
+            if is_graded:
+                for q in retry_questions:
+                    user_choice = st.session_state.get(f"retry_ans_{q['id']}", "")
+                    if str(user_choice).strip() == q['correct']:
+                        correct_count += 1
+                
+                st.write("")
+                st.markdown(f"<div style='text-align: center; font-size: 20px; font-weight: bold;'>총 {len(retry_questions)}문제 중 {correct_count}문제 정답!</div>", unsafe_allow_html=True)
+                if correct_count == len(retry_questions):
+                    st.balloons()
+                st.write("")
+
+            # 문제 출제 UI
+            for q in retry_questions:
+                with st.container(border=True):
+                    user_choice = st.session_state.get(f"retry_ans_{q['id']}", "")
+                    is_correct = (str(user_choice).strip() == q['correct']) if is_graded else False
+                    
+                    mark = ""
+                    if is_graded:
+                        mark = "<span style='color: #28A745; font-size: 17px;'>⭕</span> " if is_correct else "<span style='color: #FF4B4B; font-size: 17px;'>❌</span> "
+                    
+                    c1, c2 = st.columns([7, 3])
+                    with c1:
+                        imp_class = f"tag-{q['imp'].lower()}"
+                        st.markdown(f"**{mark}{q['id']}** &nbsp; <span class='{imp_class}'>{q['imp']}</span> &nbsp; <span class='tag-type'>{q['type']}</span>", unsafe_allow_html=True)
+                    with c2: 
+                        st.markdown(f"<div style='text-align: right; color: #888; font-size: 13px;'>{q['source']}</div>", unsafe_allow_html=True)
+                        
+                    st.markdown(f"<div style='margin-top: 15px; margin-bottom: 15px; font-size: 16px; color: var(--text-color);'>{q['text']}</div>", unsafe_allow_html=True)
+
+                    render_question_input(q, q['id'], prefix="retry_ans", is_disabled=is_graded)
+
+                    if is_graded:
+                        st.write("")
+                        ans_col1, ans_col2 = st.columns(2)
+                        with ans_col1:
+                            if is_correct: 
+                                st.success(f"⭕ **나의 답:** &nbsp; {user_choice}")
+                            else: 
+                                st.error(f"❌ **나의 답:** &nbsp; {user_choice if user_choice else '미입력'}")
+                        with ans_col2:
+                            st.info(f"✅ **정답:** &nbsp; {q['correct']}")
+                        
+                        st.write("")
+                        with st.expander("해설 보기 ▾", expanded=True):
+                            st.write(q['exp'])
+
+            if not is_graded:
+                st.write("")
+                if st.button("채점", type="primary", use_container_width=True):
+                    st.session_state.retry_graded = True
+                    st.rerun()
+            else:
+                # ✅ 채점 완료 후 맞은 문제를 resolved_set에 추가
+                newly_resolved = set()
+                for q in retry_questions:
+                    user_choice = st.session_state.get(f"retry_ans_{q['id']}", "")
+                    if str(user_choice).strip() == q['correct']:
+                        newly_resolved.add(q['id'])
+
+                st.write("")
+                if st.button("복습 완료", type="primary", use_container_width=True):
+                    # resolved_questions 업데이트
+                    if attempt_id not in st.session_state.resolved_questions:
+                        st.session_state.resolved_questions[attempt_id] = set()
+                    st.session_state.resolved_questions[attempt_id].update(newly_resolved)
+
+                    st.session_state.retry_mode_active = False
+                    st.session_state.retry_graded = False
+                    st.rerun()
+
+            return
+
+        # ------------------------------------------
+        # [화면 A] 오답 보기 상세 화면
+        # 해결된 문제는 맨 아래 + 시각적으로 구분해서 표시
+        # ------------------------------------------
+        btn_c1, btn_space, btn_c2 = st.columns([2, 6, 2.5])
+        with btn_c1:
+            if st.button("← 목록으로 돌아가기"):
+                st.session_state.selected_review_id = None
+                for key in list(st.session_state.keys()):
+                    if key.startswith("view_ans_"): del st.session_state[key]
+                st.rerun()
+        with btn_c2:
+            all_resolved = len(resolved_set) >= len(mock_wrong_questions)
+            retry_label = "모두 해결 완료!" if all_resolved else "오답 다시 풀기 ↻"
+            if st.button(retry_label, type="primary", use_container_width=True, disabled=all_resolved):
+                st.session_state.retry_mode_active = True
+                st.session_state.retry_graded = False
+                for q in mock_wrong_questions:
+                    # 해결 안 된 문제 답변만 초기화
+                    if q['id'] not in resolved_set:
+                        ans_key = f"retry_ans_{q['id']}"
+                        if ans_key in st.session_state:
+                            del st.session_state[ans_key]
+                st.rerun()
+                
+        st.write("")
+
+        if len(resolved_set) > 0:
+            total_wrong = len(mock_wrong_questions)
+            solved_count = len(resolved_set)
+            progress_val = solved_count / total_wrong
+            st.markdown(f"<div style='font-size: 13px; color: #888; margin-bottom: 4px;'>해결 현황: {solved_count} / {total_wrong} 문제</div>", unsafe_allow_html=True)
+            st.progress(progress_val)
+            st.write("")
+
+        st.markdown(f"### {selected_file['title']} <span style='font-size: 20px; color: #888;'>({selected_attempt['round']}회차)</span> 오답 노트", unsafe_allow_html=True)
+        st.caption(f"총 {selected_attempt['wrong']}개의 오답을 모아봤습니다. 취약점을 완벽하게 보완해 보세요!")
+        st.divider()
+
+        unresolved_qs = [q for q in mock_wrong_questions if q['id'] not in resolved_set]
+        resolved_qs   = [q for q in mock_wrong_questions if q['id'] in resolved_set]
+
+        def render_wrong_question_card(q, is_resolved=False):
+            """오답 카드 렌더링 - is_resolved=True 이면 흐리게 + 해결 배지 표시"""
+            if is_resolved:
+                st.markdown(
+                    "<div style='opacity: 0.45; pointer-events: none;'>",
+                    unsafe_allow_html=True
+                )
+
             with st.container(border=True):
                 c1, c2 = st.columns([7, 3])
                 with c1:
                     imp_class = f"tag-{q['imp'].lower()}"
-                    st.markdown(f"**{q['id']}** &nbsp; <span class='{imp_class}'>{q['imp']}</span> &nbsp; <span class='tag-type'>{q['type']}</span>", unsafe_allow_html=True)
+                    resolved_badge = "&nbsp; <span style='background:#28A745; color:white; font-size:11px; padding:2px 7px; border-radius:10px;'>✔ 해결</span>" if is_resolved else ""
+                    st.markdown(
+                        f"**{q['id']}** &nbsp; <span class='{imp_class}'>{q['imp']}</span> &nbsp; <span class='tag-type'>{q['type']}</span>{resolved_badge}",
+                        unsafe_allow_html=True
+                    )
                 with c2: 
                     st.markdown(f"<div style='text-align: right; color: #888; font-size: 13px;'>{q['source']}</div>", unsafe_allow_html=True)
                 
                 st.markdown(f"<div style='margin-top: 15px; margin-bottom: 15px; font-size: 16px; color: var(--text-color);'>{q['text']}</div>", unsafe_allow_html=True)
                 
-                if q['type'] == "객관식" and "options" in q:
-                    st.markdown("<div style='background-color: var(--secondary-background-color); padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid rgba(151,151,151,0.2);'>", unsafe_allow_html=True)
-                    for opt in q['options']:
-                        if opt == q['correct']: st.markdown(f"**<span style='color: #28A745;'>✅ {opt}</span>**", unsafe_allow_html=True)
-                        elif opt == q['my_ans']: st.markdown(f"**<span style='color: #FF4B4B;'>❌ {opt}</span>**", unsafe_allow_html=True)
-                        else: st.markdown(f"<span style='color: #666;'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {opt}</span>", unsafe_allow_html=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
+                render_question_input(q, q['id'], prefix="view_ans", is_disabled=True, prefill_ans=q['my_ans'])
                 
+                st.write("")
                 ans_col1, ans_col2 = st.columns(2)
-                with ans_col1: st.error(f"❌ **나의 답:** &nbsp; {q['my_ans']}")
-                with ans_col2: st.success(f"✅ **정답:** &nbsp; {q['correct']}")
+                with ans_col1: 
+                    st.error(f"❌ **나의 답:** &nbsp; {q['my_ans']}")
+                with ans_col2: 
+                    st.info(f"✅ **정답:** &nbsp; {q['correct']}")
                     
                 st.write("")
-                st.info(f"**💡 해설:** {q['exp']}")
-        
+                with st.expander("해설 보기 ▾", expanded=not is_resolved):
+                    st.write(q['exp'])
+
+            if is_resolved:
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        # 미해결 문제 렌더링
+        for q in unresolved_qs:
+            render_wrong_question_card(q, is_resolved=False)
+
+        # 해결된 문제가 있으면 구분선 + 섹션 타이틀 후 렌더링
+        if resolved_qs:
+            st.write("")
+            st.markdown(
+                "<div style='display: flex; align-items: center; gap: 8px; color: #28A745; font-size: 14px; font-weight: 600;'>"
+                "✔ 해결된 문제</div>",
+                unsafe_allow_html=True
+            )
+            st.markdown("<hr style='margin: 6px 0 12px 0; border-color: #28A74533;'>", unsafe_allow_html=True)
+            for q in resolved_qs:
+                render_wrong_question_card(q, is_resolved=True)
+
         return
 
     # ==========================================
@@ -136,13 +345,14 @@ def show_review_screen():
             c1, c2 = st.columns(2)
             if c1.button("취소", use_container_width=True): st.rerun()
             if c2.button("확인", type="primary", use_container_width=True):
-                # ⭐️ 삭제는 원본(st.session_state.grouped_reviews)에서 반영해야 합니다.
                 for f_id, a_id in selected_attempts:
                     for file in st.session_state.grouped_reviews:
                         if file['id'] == f_id:
                             file['attempts'] = [a for a in file['attempts'] if a['id'] != a_id]
+                    # ✅ 삭제 시 해당 회차의 resolved 데이터도 정리
+                    if a_id in st.session_state.resolved_questions:
+                        del st.session_state.resolved_questions[a_id]
                 
-                # 빈 폴더 청소
                 st.session_state.grouped_reviews = [f for f in st.session_state.grouped_reviews if len(f['attempts']) > 0]
                 st.session_state.rev_select_all = False
                 st.rerun()
@@ -164,9 +374,8 @@ def show_review_screen():
 
         st.markdown('<div class="card" style="padding: 10px 24px;">', unsafe_allow_html=True)
         
-        # ⭐️ 렌더링 시에는 필터링된 데이터(filtered_reviews)만 사용!
         for file in filtered_reviews:
-            with st.expander(f"📁 **{file['title']}** 　(총 {file['total_count']}회 응시 기록)"):
+            with st.expander(f"📁 **{file['title']}**  (총 {file['total_count']}회 응시 기록)"):
                 
                 inner_cols = st.columns([0.5, 1.5, 2.5, 1.5, 1.5, 1.5, 2])
                 with inner_cols[0]: st.write("") 
@@ -181,15 +390,25 @@ def show_review_screen():
                 for attempt in file['attempts']:
                     row_cols = st.columns([0.5, 1.5, 2.5, 1.5, 1.5, 1.5, 2])
                     
+                    resolved_count = len(st.session_state.resolved_questions.get(attempt['id'], set()))
+                    remaining_wrong = attempt['wrong'] - resolved_count
+
                     with row_cols[0]: st.checkbox("", key=f"rev_chk_{file['id']}_{attempt['id']}", label_visibility="collapsed")
                     with row_cols[1]: st.write(f"**{attempt['round']}회차**")
                     with row_cols[2]: st.write(attempt['date'])
                     with row_cols[3]: st.write(str(attempt['total']))
                     with row_cols[4]: st.write(str(attempt['correct']))
                     
-                    # ⭐️ 개선 2: 어차피 필터링을 거쳤으므로 조건문 없이 무조건 오답 버튼 노출
-                    with row_cols[5]: 
-                        st.markdown(f"**<span style='color: #FF4B4B;'>{attempt['wrong']}</span>**", unsafe_allow_html=True)
+                    with row_cols[5]:
+                        if resolved_count > 0:
+                            st.markdown(
+                                f"**<span style='color: #FF4B4B;'>{remaining_wrong}</span>** "
+                                f"<span style='color: #28A745; font-size: 12px;'>(+ {resolved_count} 해결)</span>",
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            st.markdown(f"**<span style='color: #FF4B4B;'>{attempt['wrong']}</span>**", unsafe_allow_html=True)
+
                     with row_cols[6]:
                         if st.button("오답 보기 ↗", key=f"btn_view_wr_{attempt['id']}", use_container_width=True):
                             st.session_state.selected_review_id = attempt['id']

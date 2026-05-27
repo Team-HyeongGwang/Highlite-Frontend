@@ -111,7 +111,7 @@ def show_library_screen():
                     row_cols = st.columns([0.5, 2, 2.5, 2, 3])
                     
                     with row_cols[0]: 
-                        st.checkbox("", key=f"chk_{file['id']}_{attempt['id']}", label_visibility="collapsed")
+                        st.checkbox("선택", key=f"chk_{file['id']}_{attempt['id']}", label_visibility="collapsed")
                         
                     with row_cols[1]: st.write(f"**{attempt['round']}회차**")
                     with row_cols[2]: st.write(attempt['date'])
