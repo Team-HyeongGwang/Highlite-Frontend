@@ -1,5 +1,7 @@
 # views/upload.py
+from urllib import response
 import streamlit as st
+import requests
 
 def show_upload_screen():
     from utils import color_options, add_rank, remove_rank
@@ -143,9 +145,30 @@ def show_upload_screen():
             
     st.markdown("<div style='margin-top: 40px;'></div>", unsafe_allow_html=True)
     
-    # --- 문제 생성 버튼 및 로딩 ---
+    # --- 문제 생성 버튼 및 로딩 (+ DB 저장) ---
     import time
     if st.button("문제 생성", type="primary", use_container_width=True, key="btn_gen_quiz"):
+        
+        # DB에 저장할 랭킹 정보 저장
+        payload = {
+            "highlight_ranks": st.session_state.hl_ranks,
+            "pen_ranks": st.session_state.pen_ranks
+        }
+        
+        # 랭킹 정보 저장 API 호출 (터미널 로그만 남김)
+        try:
+            response = requests.post(
+                f"http://localhost:8000/rank/colors/{USER_ID}",
+                json=payload,
+                timeout=10
+            )
+            if response.status_code == 200:
+                print(f"✅ 유저 {USER_ID} 색상 랭킹 DB 저장 완료!") # 터미널(명령 프롬프트)에만 출력됨
+            else:
+                print(f"⚠️ DB 저장 실패 (상태코드: {response.status_code})")
+        except Exception as e:
+            print(f"⚠️ 백엔드 통신 오류: {e}")
+        
         with st.status("AI 1타 강사가 문서를 분석하고 있습니다...", expanded=True) as status:
             st.write("🔍 PDF 텍스트 및 중요도 색상(형광펜/필기펜) 추출 중...")
             time.sleep(1.5) 
