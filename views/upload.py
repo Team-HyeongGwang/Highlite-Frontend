@@ -4,7 +4,7 @@ import streamlit as st
 import requests
 
 def show_upload_screen():
-    from utils import color_options, add_rank, remove_rank
+    from utils import color_options, add_rank, remove_rank, convert_rank_to_json
 
     # --- 💎 완벽한 앱 디자인을 위한 커스텀 CSS ---
     st.markdown("""
@@ -151,8 +151,8 @@ def show_upload_screen():
         
         # DB에 저장할 랭킹 정보 저장
         payload = {
-            "highlight_ranks": st.session_state.hl_ranks,
-            "pen_ranks": st.session_state.pen_ranks
+            "highlighter_ranking": convert_rank_to_json(st.session_state.hl_ranks),
+            "pen_ranking": convert_rank_to_json(st.session_state.pen_ranks)
         }
         
         # 랭킹 정보 저장 API 호출 (터미널 로그만 남김)
@@ -160,7 +160,7 @@ def show_upload_screen():
             response = requests.post(
                 f"http://localhost:8000/rank/colors/{USER_ID}",
                 json=payload,
-                timeout=10
+                timeout=30
             )
             if response.status_code == 200:
                 print(f"✅ 유저 {USER_ID} 색상 랭킹 DB 저장 완료!") # 터미널(명령 프롬프트)에만 출력됨
