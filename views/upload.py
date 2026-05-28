@@ -174,6 +174,9 @@ def show_upload_screen():
             )
             if response.status_code == 200:
                 print(f"✅ 유저 {USER_ID} 색상 랭킹 DB 저장 완료!") # 터미널(명령 프롬프트)에만 출력됨
+                # DB 저장 성공 시 사이드바 반영
+                st.session_state.hl_ranks = st.session_state.up_hl_ranks.copy()
+                st.session_state.pen_ranks = st.session_state.up_pen_ranks.copy()
             else:
                 print(f"⚠️ DB 저장 실패 (상태코드: {response.status_code})")
         except Exception as e:
