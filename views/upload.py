@@ -142,6 +142,7 @@ def show_upload_screen():
         with p_col2: st.button("➕", key="up_add_pen", on_click=add_rank_upload, args=('pen',), use_container_width=True)
         with p_col3: st.button("➖", key="up_rem_pen", on_click=remove_rank_upload, args=('pen',), use_container_width=True)
 
+        #  필기펜 selectbox — pen_ranks 대신 up_pen_ranks 사용
         for i in range(len(st.session_state.up_pen_ranks)):
             label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
             # ⭐️ 모던해진 순위 뱃지 UI 적용
