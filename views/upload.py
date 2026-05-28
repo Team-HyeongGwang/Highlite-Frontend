@@ -1,4 +1,3 @@
-# views/upload.py
 import streamlit as st
 import requests
 import time
@@ -51,7 +50,7 @@ def show_upload_screen():
 
     if upload_type == "교재에 직접 필기":
         st.markdown("<div class='step-desc'>💡 교재 PDF 위에 직접 필기한 경우, 해당 파일을 올려주시면 됩니다. (여러 파일 동시 선택 가능)</div>", unsafe_allow_html=True)
-        uploaded_files = st.file_uploader(
+        st.file_uploader(
             "교재 필기본 업로드",
             key="single_up",
             accept_multiple_files=True,
@@ -62,7 +61,7 @@ def show_upload_screen():
         c1, c2 = st.columns(2)
         with c1:
             st.write("**원본 교재**")
-            uploaded_files = st.file_uploader(
+            st.file_uploader(
                 "원본 교재 업로드",
                 key="double_up_1",
                 accept_multiple_files=True,
@@ -152,7 +151,6 @@ def show_upload_screen():
             st.write("🧠 AI 모델이 핵심 개념을 바탕으로 문제 출제 중...")
 
             try:
-                # 더미 group_id 사용 (RAG 연동 완료되면 실제 group_id로 교체)
                 group_id = st.session_state.get("group_id", "string")
                 document_id = st.session_state.get("document_id", 9)
                 user_id = st.session_state.get("user_id", 1)
@@ -163,7 +161,7 @@ def show_upload_screen():
                         "group_id": group_id,
                         "question_count": question_count
                     },
-                    timeout=300  # 문제 생성 시간이 길 수 있어서 넉넉하게
+                    timeout=300
                 )
 
                 if response.status_code == 200:
@@ -171,7 +169,6 @@ def show_upload_screen():
                     questions = result.get("questions", [])
 
                     if questions:
-                        # 세션에 저장
                         st.session_state.questions = questions
                         st.session_state.user_id = user_id
                         st.session_state.document_id = document_id

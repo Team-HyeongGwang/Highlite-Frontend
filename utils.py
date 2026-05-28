@@ -1,4 +1,3 @@
-# utils.py
 import streamlit as st
 
 # 공통으로 쓰는 색상 데이터
