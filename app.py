@@ -3,6 +3,7 @@ from streamlit_option_menu import option_menu
 import jwt
 import time
 from streamlit_cookies_controller import CookieController
+import requests
 
 # 페이지 설정 및 CSS
 st.set_page_config(layout="wide", page_title="Highlite | 1타 강사 AI")
@@ -17,7 +18,7 @@ from views.review import show_review_screen
 from views.export import show_export_screen
 from views.mypage import show_mypage_screen
 
-from utils import color_options, add_rank, remove_rank, fetch_rank_colors
+from utils import color_options, add_rank, convert_rank_to_json, remove_rank, fetch_rank_colors
 
 st.markdown("""
 <style>
@@ -155,6 +156,24 @@ else:
                 st.session_state.pen_ranks[i] = st.selectbox(f"필기펜 {i+1}", color_options, index=color_options.index(st.session_state.pen_ranks[i]), key=f"dlg_pen_{i}")
 
         if st.button("저장 및 닫기", type="primary", use_container_width=True):
+            user_id = st.session_state.get("user_info", {}).get("user_id", 9)
+            payload = {
+                "highlighter_ranking": convert_rank_to_json(st.session_state.hl_ranks),
+                "pen_ranking": convert_rank_to_json(st.session_state.pen_ranks)
+            }
+            try:
+                response = requests.post(
+                    f"http://localhost:8000/rank/colors/{user_id}",
+                    json=payload,
+                    timeout=30
+                )
+                if response.status_code == 200:
+                    print(f"✅ 유저 {user_id} 색상 랭킹 DB 저장 완료!")
+                else:
+                    print(f"⚠️ DB 저장 실패 (상태코드: {response.status_code})")
+            except Exception as e:
+                print(f"⚠️ 백엔드 통신 오류: {e}")
+            
             st.rerun()
 
     # ==========================================
