@@ -17,7 +17,7 @@ from views.review import show_review_screen
 from views.export import show_export_screen
 from views.mypage import show_mypage_screen
 
-from utils import color_options, add_rank, remove_rank
+from utils import color_options, add_rank, remove_rank, fetch_rank_colors
 
 st.markdown("""
 <style>
@@ -54,6 +54,7 @@ if "access_token" not in st.session_state:
         try:
             decoded = jwt.decode(cookie_token, options={"verify_signature": False})
             st.session_state["user_info"] = {
+                "user_id": decoded.get("user_id", 9),
                 "username": decoded.get("username", "유저"),
                 "email": decoded.get("sub", "이메일 없음"),
                 "profile_image_url": decoded.get("picture"),
@@ -69,11 +70,13 @@ if "token" in st.query_params:
     try:
         decoded = jwt.decode(token, options={"verify_signature": False})
         st.session_state["user_info"] = {
+            "user_id": decoded.get("user_id", 9),
             "username": decoded.get("username", "이름 없음"),
             "email": decoded.get("sub", "이메일 없음"),
             "profile_image_url": decoded.get("picture"),
             "join_date": decoded.get("join_date", "2026.05.26")
         }
+        
     except Exception:
         pass
         
@@ -88,10 +91,12 @@ if not is_logged_in:
     show_login_screen()
 
 else:
-    if 'hl_ranks' not in st.session_state: 
-        st.session_state.hl_ranks = ["🟨 노랑"]
-    if 'pen_ranks' not in st.session_state: 
-        st.session_state.pen_ranks = ["🟥 빨강"]
+    if 'hl_ranks' not in st.session_state or 'pen_ranks' not in st.session_state:
+        user_id = st.session_state.get("user_info", {}).get("user_id")
+        hl, pen = fetch_rank_colors(user_id)
+        st.session_state.hl_ranks = hl if hl else ["🟨 노랑"]
+        st.session_state.pen_ranks = pen if pen else ["🟥 빨강"]
+    
     if 'show_mypage' not in st.session_state: 
         st.session_state.show_mypage = False
     if 'library_files' not in st.session_state:
