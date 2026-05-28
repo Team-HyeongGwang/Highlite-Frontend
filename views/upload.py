@@ -3,8 +3,16 @@ from urllib import response
 import streamlit as st
 import requests
 
+from utils import remove_rank_upload
+
 def show_upload_screen():
-    from utils import color_options, add_rank, remove_rank, convert_rank_to_json
+    from utils import color_options, add_rank, remove_rank, add_rank_upload, remove_rank_upload, convert_rank_to_json
+
+    # 업로드 화면 전용 임시 상태 초기화
+    if 'up_hl_ranks' not in st.session_state:
+        st.session_state.up_hl_ranks = st.session_state.hl_ranks.copy()
+    if 'up_pen_ranks' not in st.session_state:
+        st.session_state.up_pen_ranks = st.session_state.pen_ranks.copy()
 
     # --- 💎 완벽한 앱 디자인을 위한 커스텀 CSS ---
     st.markdown("""
@@ -113,16 +121,17 @@ def show_upload_screen():
     with col_hl_ui:
         h_col1, h_col2, h_col3 = st.columns([3, 1, 1])
         with h_col1: st.write("**형광펜** 순위")
-        with h_col2: st.button("➕", key="up_add_hl", on_click=add_rank, args=('hl',), use_container_width=True)
-        with h_col3: st.button("➖", key="up_rem_hl", on_click=remove_rank, args=('hl',), use_container_width=True)
-        
-        for i in range(len(st.session_state.hl_ranks)):
+        with h_col2: st.button("➕", key="up_add_hl", on_click=add_rank_upload, args=('hl',), use_container_width=True)
+        with h_col3: st.button("➖", key="up_rem_hl", on_click=remove_rank_upload, args=('hl',), use_container_width=True)
+
+        # 형광펜 selectbox — hl_ranks 대신 up_hl_ranks 사용
+        for i in range(len(st.session_state.up_hl_ranks)):
             label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
             # ⭐️ 모던해진 순위 뱃지 UI 적용
             st.markdown(f"<div class='rank-label-container'><div class='rank-badge'>{i+1}</div><div class='rank-text'>{label}</div></div>", unsafe_allow_html=True)
-            st.session_state.hl_ranks[i] = st.selectbox(
-                f"형광펜 {i+1}순위", color_options, 
-                index=color_options.index(st.session_state.hl_ranks[i]), 
+            st.session_state.up_hl_ranks[i] = st.selectbox(
+                f"형광펜 {i+1}순위", color_options,
+                index=color_options.index(st.session_state.up_hl_ranks[i]),
                 key=f"up_hl_{i}", label_visibility="collapsed"
             )
             
@@ -130,18 +139,18 @@ def show_upload_screen():
     with col_pen_ui:
         p_col1, p_col2, p_col3 = st.columns([3, 1, 1])
         with p_col1: st.write("**필기펜** 순위")
-        with p_col2: st.button("➕", key="up_add_pen", on_click=add_rank, args=('pen',), use_container_width=True)
-        with p_col3: st.button("➖", key="up_rem_pen", on_click=remove_rank, args=('pen',), use_container_width=True)
-        
-        for i in range(len(st.session_state.pen_ranks)):
+        with p_col2: st.button("➕", key="up_add_pen", on_click=add_rank_upload, args=('pen',), use_container_width=True)
+        with p_col3: st.button("➖", key="up_rem_pen", on_click=remove_rank_upload, args=('pen',), use_container_width=True)
+
+        for i in range(len(st.session_state.up_pen_ranks)):
             label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
             # ⭐️ 모던해진 순위 뱃지 UI 적용
             st.markdown(f"<div class='rank-label-container'><div class='rank-badge'>{i+1}</div><div class='rank-text'>{label}</div></div>", unsafe_allow_html=True)
-            st.session_state.pen_ranks[i] = st.selectbox(
-                f"필기펜 {i+1}순위", color_options, 
-                index=color_options.index(st.session_state.pen_ranks[i]), 
+            st.session_state.up_pen_ranks[i] = st.selectbox(
+                f"필기펜 {i+1}순위", color_options,
+                index=color_options.index(st.session_state.up_pen_ranks[i]),
                 key=f"up_pen_{i}", label_visibility="collapsed"
-            )
+            )   
             
     st.markdown("<div style='margin-top: 40px;'></div>", unsafe_allow_html=True)
     
@@ -151,12 +160,13 @@ def show_upload_screen():
         
         # DB에 저장할 랭킹 정보 저장
         payload = {
-            "highlighter_ranking": convert_rank_to_json(st.session_state.hl_ranks),
-            "pen_ranking": convert_rank_to_json(st.session_state.pen_ranks)
+            "highlighter_ranking": convert_rank_to_json(st.session_state.up_hl_ranks),
+            "pen_ranking": convert_rank_to_json(st.session_state.up_pen_ranks)
         }
         
         # 랭킹 정보 저장 API 호출 (터미널 로그만 남김)
         try:
+            USER_ID = 9
             response = requests.post(
                 f"http://localhost:8000/rank/colors/{USER_ID}",
                 json=payload,

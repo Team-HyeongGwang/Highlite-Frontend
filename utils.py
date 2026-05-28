@@ -43,6 +43,17 @@ def remove_rank(type):
     if len(target) > 1: target.pop()
     # st.rerun()
     
+    
+# 업로드 화면 전용 (up_hl_ranks, up_pen_ranks 사용)
+def add_rank_upload(type):
+    target = st.session_state.up_hl_ranks if type == 'hl' else st.session_state.up_pen_ranks
+    if len(target) < 3: target.append("선택 안함")
+
+def remove_rank_upload(type):
+    target = st.session_state.up_hl_ranks if type == 'hl' else st.session_state.up_pen_ranks
+    if len(target) > 1: target.pop()
+    
+    
 # 사용자 랭킹 정보 가져오기
 API_BASE_URL = "http://localhost:8000"
 
