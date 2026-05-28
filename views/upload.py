@@ -167,7 +167,6 @@ def show_upload_screen():
         
         # 랭킹 정보 저장 API 호출 (터미널 로그만 남김)
         try:
-            USER_ID = 9
             response = requests.post(
                 f"http://localhost:8000/rank/colors/{USER_ID}",
                 json=payload,
