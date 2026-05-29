@@ -195,6 +195,13 @@ else:
                 },
             }
         )
+
+        if 'current_menu' not in st.session_state:
+            st.session_state.current_menu = menu
+            
+        if menu != st.session_state.current_menu:
+            st.session_state.current_menu = menu
+            st.session_state.show_mypage = False
         
         st.markdown("---")
         
