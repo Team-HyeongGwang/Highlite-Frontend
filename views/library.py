@@ -10,7 +10,6 @@ def show_library_screen():
         
     st.write("")
     
-    # 💡 [가짜 데이터 세팅]
     if 'grouped_files' not in st.session_state:
         st.session_state.grouped_files = [
             {
@@ -76,7 +75,6 @@ def show_library_screen():
                     
         st.markdown('<div class="card" style="padding: 10px 24px;">', unsafe_allow_html=True)
         
-# ⭐️ 문서 이름 변경 팝업창
         @st.dialog("문서 이름 변경")
         def rename_doc_dialog(f_id, current_title):
             new_title = st.text_input("새로운 문서명을 입력하세요", value=current_title, label_visibility="collapsed")
