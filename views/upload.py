@@ -7,7 +7,10 @@ from utils import remove_rank_upload
 
 def show_upload_screen():
     from utils import color_options, add_rank, remove_rank, add_rank_upload, remove_rank_upload, convert_rank_to_json
+    import json
 
+    USER_ID = st.session_state.get("user_info", {}).get("user_id")
+    
     # 업로드 화면 전용 임시 상태 초기화
     if 'up_hl_ranks' not in st.session_state:
         st.session_state.up_hl_ranks = st.session_state.hl_ranks.copy()

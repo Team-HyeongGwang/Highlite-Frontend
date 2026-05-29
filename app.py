@@ -71,7 +71,7 @@ if "token" in st.query_params:
     try:
         decoded = jwt.decode(token, options={"verify_signature": False})
         st.session_state["user_info"] = {
-            "user_id": decoded.get("user_id", 9),
+            "user_id": decoded.get("user_id"),
             "username": decoded.get("username", "이름 없음"),
             "email": decoded.get("sub", "이메일 없음"),
             "profile_image_url": decoded.get("picture"),
