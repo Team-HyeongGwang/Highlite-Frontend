@@ -1,6 +1,7 @@
 # views/upload.py
 from urllib import response
 import streamlit as st
+import uuid
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -163,6 +164,8 @@ def show_upload_screen():
     import time
     if st.button("문제 생성", type="primary", use_container_width=True, key="btn_gen_quiz"):
         
+        group_id = str(uuid.uuid4())
+        
         # 파일 업로드 먼저
         if upload_type == "교재에 직접 필기":
             for file in (st.session_state.get("single_up") or []):
@@ -171,7 +174,8 @@ def show_upload_screen():
                     files={"file": (file.name, file.read(), "application/pdf")},
                     data={
                         "user_id": USER_ID,
-                        "doc_type": json.dumps({"mode": "single", "type": None})
+                        "doc_type": json.dumps({"mode": "single", "type": None}),
+                        "group_id": group_id
                     }
                 )
         else:
@@ -182,7 +186,8 @@ def show_upload_screen():
                     files={"file": (file.name, file.read(), "application/pdf")},
                     data={
                         "user_id": USER_ID,
-                        "doc_type": json.dumps({"mode": mode, "type": doc_type})
+                        "doc_type": json.dumps({"mode": mode, "type": doc_type}),
+                        "group_id": group_id
                     }
                 )
 
