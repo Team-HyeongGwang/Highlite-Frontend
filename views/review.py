@@ -32,20 +32,18 @@ def render_question_input(q, q_id, prefix, is_disabled=False, prefill_ans=None):
 
 
 def show_review_screen():
-    # --- 상태(State) 관리 초기화 ---
     if 'selected_review_id' not in st.session_state:
         st.session_state.selected_review_id = None
     if 'retry_mode_active' not in st.session_state:
         st.session_state.retry_mode_active = False
     if 'retry_graded' not in st.session_state:
         st.session_state.retry_graded = False
+    if 'resolved_q_ids' not in st.session_state:
+        st.session_state.resolved_q_ids = []
 
-    # ✅ 회차별 해결된 문제 ID를 저장하는 딕셔너리
-    # { "rev_101": {"Q02", "Q05"}, ... }
     if 'resolved_questions' not in st.session_state:
         st.session_state.resolved_questions = {}
 
-    # 💡 [가짜 데이터]
     if 'grouped_reviews' not in st.session_state:
         st.session_state.grouped_reviews = [
             {
@@ -68,7 +66,7 @@ def show_review_screen():
     # 필터링 로직 (오답이 있는 회차만)
     # ==========================================
     filtered_reviews = []
-    for file in st.session_state.grouped_reviews:
+    for file in st.session_state.grouped_files:
         wrong_attempts = [a for a in file['attempts'] if a['wrong'] > 0]
         if len(wrong_attempts) > 0:
             new_file = file.copy()
