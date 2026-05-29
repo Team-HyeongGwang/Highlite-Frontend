@@ -129,7 +129,7 @@ def show_quiz_screen():
         st.info("해당 조건에 맞는 문제가 없습니다.")
 
     # ----------------------------------------------------
-    # 2. 문제 렌더링 루프 (⭐️ 원본 mock_questions 대신 filtered_questions 사용)
+    # 2. 문제 렌더링 루프 
     # ----------------------------------------------------
     for idx, q in enumerate(filtered_questions): 
         # 주의: session_state 키가 꼬이지 않도록 원본 리스트(mock_questions)에서의 
@@ -147,7 +147,6 @@ def show_quiz_screen():
 
             c1, c2 = st.columns([7, 3])
             with c1:
-                # ⭐️ 한글을 다시 기존 영어 클래스(r, o, y)와 연결해 줍니다.
                 imp_map = {"핵심": "r", "중요": "o", "참고": "y"}
                 imp_class = f"tag-{imp_map.get(q['imp'], 'r')}" 
                 
