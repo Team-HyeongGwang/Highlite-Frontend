@@ -62,10 +62,10 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
 # ----------------------------------------------------
 def show_quiz_screen():
     mock_questions = [
-        {"id": "Q01", "imp": "R", "type": "객관식", "text": "수요의 가격탄력성이 1보다 클 때, 가격이 상승하면 총수입은 어떻게 변하는가?", "options": ["① 증가한다", "② 감소한다", "③ 변하지 않는다", "④ 알 수 없다"], "correct": "② 감소한다", "source": "p.13 · 형광펜에서 추출", "exp": "가격탄력성이 1보다 큰 경우(탄력적) 가격 상승 시 총수입은 감소합니다."},
-        {"id": "Q02", "imp": "O", "type": "OX", "text": "기회비용은 회계장부에 기록되는 명시적 비용만을 의미한다.", "options": ["O", "X"], "correct": "X", "source": "p.14 · 형광펜에서 추출", "exp": "기회비용은 명시적 비용 + 암묵적 비용을 모두 포함하므로 명시적 비용만 기록하는 회계장부 비용보다 일반적으로 큽니다."},
-        {"id": "Q03", "imp": "Y", "type": "OX", "text": "한계효용 체감의 법칙은 모든 재화에 항상 성립한다.", "options": ["O", "X"], "correct": "X", "source": "p.15 · 형광펜에서 추출", "exp": "중독성 재화 등 예외도 존재하므로 항상 성립하는 것은 아닙니다."},
-        {"id": "Q04", "imp": "R", "type": "빈칸채우기", "text": "완전경쟁시장에서 개별 기업은 가격 결정자가 아닌 가격 (      ) 이다.", "correct": "수용자", "source": "p.16 · 필기펜에서 추출", "exp": "개별 기업은 시장 가격을 그대로 받아들이는 수용자(Price Taker)입니다."}
+        {"id": "Q01", "imp": "핵심", "type": "객관식", "text": "수요의 가격탄력성이 1보다 클 때, 가격이 상승하면 총수입은 어떻게 변하는가?", "options": ["① 증가한다", "② 감소한다", "③ 변하지 않는다", "④ 알 수 없다"], "correct": "② 감소한다", "source": "p.13 · 형광펜에서 추출", "exp": "가격탄력성이 1보다 큰 경우(탄력적) 가격 상승 시 총수입은 감소합니다."},
+        {"id": "Q02", "imp": "중요", "type": "OX", "text": "기회비용은 회계장부에 기록되는 명시적 비용만을 의미한다.", "options": ["O", "X"], "correct": "X", "source": "p.14 · 형광펜에서 추출", "exp": "기회비용은 명시적 비용 + 암묵적 비용을 모두 포함하므로 명시적 비용만 기록하는 회계장부 비용보다 일반적으로 큽니다."},
+        {"id": "Q03", "imp": "중요", "type": "OX", "text": "한계효용 체감의 법칙은 모든 재화에 항상 성립한다.", "options": ["O", "X"], "correct": "X", "source": "p.15 · 형광펜에서 추출", "exp": "중독성 재화 등 예외도 존재하므로 항상 성립하는 것은 아닙니다."},
+        {"id": "Q04", "imp": "참고", "type": "빈칸채우기", "text": "완전경쟁시장에서 개별 기업은 가격 결정자가 아닌 가격 (      ) 이다.", "correct": "수용자", "source":"p.16 · 필기펜에서 추출", "exp": "개별 기업은 시장 가격을 그대로 받아들이는 수용자(Price Taker)입니다."}
     ]
 
     if 'quiz_phase' not in st.session_state: 
@@ -107,21 +107,38 @@ def show_quiz_screen():
                 st.session_state.quiz_phase = "retake"
                 st.rerun()
                 
-    st.radio("필터", ["전체", "R 핵심만", "O 중요만", "Y 참고만"], horizontal=True, label_visibility="collapsed")
+    filter_choice = st.radio("필터", ["전체", "핵심", "중요", "참고"], horizontal=True, label_visibility="collapsed")
     st.write("") 
     
-    # 요약 성적표 (채점 완료 시 상단 노출)
     if st.session_state.quiz_phase == "review":
         st.success(f"총 {num_q}문제 중 **{correct_count}문제**를 맞혔습니다. (정답률 {score_percent}%)")
         st.write("")
 
+    filtered_questions = []
+    if filter_choice == "전체":
+        filtered_questions = mock_questions
+    elif filter_choice == "핵심":
+        filtered_questions = [q for q in mock_questions if q['imp'] == "핵심"]
+    elif filter_choice == "중요":
+        filtered_questions = [q for q in mock_questions if q['imp'] == "중요"]
+    elif filter_choice == "참고":
+        filtered_questions = [q for q in mock_questions if q['imp'] == "참고"]
+
+    # 만약 필터링 결과 문제가 하나도 없다면 안내 메시지 표시
+    if len(filtered_questions) == 0:
+        st.info("해당 조건에 맞는 문제가 없습니다.")
+
     # ----------------------------------------------------
-    # 2. 문제 렌더링 루프
+    # 2. 문제 렌더링 루프 
     # ----------------------------------------------------
-    for idx, q in enumerate(mock_questions):
+    for idx, q in enumerate(filtered_questions): 
+        # 주의: session_state 키가 꼬이지 않도록 원본 리스트(mock_questions)에서의 
+        # 진짜 인덱스를 찾아야 채점 및 입력값이 유지됩니다.
+        real_idx = mock_questions.index(q) 
+        
         with st.container(border=True):
             is_graded = (st.session_state.quiz_phase == "review")
-            my_ans = st.session_state.get(f"ans_{idx}", "")
+            my_ans = st.session_state.get(f"ans_{real_idx}", "") # real_idx 사용
             is_correct = (str(my_ans).strip() == q['correct']) if is_graded else False
             
             mark = ""
@@ -130,14 +147,17 @@ def show_quiz_screen():
 
             c1, c2 = st.columns([7, 3])
             with c1:
-                imp_class = f"tag-{q['imp'].lower()}"
+                imp_map = {"핵심": "r", "중요": "o", "참고": "y"}
+                imp_class = f"tag-{imp_map.get(q['imp'], 'r')}" 
+                
                 st.markdown(f"**{mark}{q['id']}** &nbsp; <span class='{imp_class}'>{q['imp']}</span> &nbsp; <span class='tag-type'>{q['type']}</span>", unsafe_allow_html=True)
             with c2: 
                 st.markdown(f"<div style='text-align: right; color: #888; font-size: 13px;'>{q['source']}</div>", unsafe_allow_html=True)
             
             st.markdown(f"<div style='margin-top: 15px; margin-bottom: 15px; font-size: 16px; color: var(--text-color);'>{q['text']}</div>", unsafe_allow_html=True)
             
-            render_question_input(q, idx, prefix="ans", is_disabled=is_graded)
+            # render_question_input에도 real_idx를 넘겨줌
+            render_question_input(q, real_idx, prefix="ans", is_disabled=is_graded)
             st.write("")
             
             if is_graded:

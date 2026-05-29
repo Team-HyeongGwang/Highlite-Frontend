@@ -10,7 +10,6 @@ def show_library_screen():
         
     st.write("")
     
-    # 💡 [가짜 데이터 세팅]
     if 'grouped_files' not in st.session_state:
         st.session_state.grouped_files = [
             {
@@ -72,28 +71,43 @@ def show_library_screen():
         with col_del:
             if st.button("삭제 ✕", use_container_width=True):
                 if selected_count > 0: delete_confirm_dialog(selected_count)
-                else: st.toast("삭제할 회차를 먼저 선택해주세요!", icon="⚠️")
+                else: st.toast("삭제할 회차를 먼저 선택해주세요.", icon="⚠️")
                     
         st.markdown('<div class="card" style="padding: 10px 24px;">', unsafe_allow_html=True)
         
+        @st.dialog("문서 이름 변경")
+        def rename_doc_dialog(f_id, current_title):
+            new_title = st.text_input("새로운 문서명을 입력하세요", value=current_title, label_visibility="collapsed")
+            st.write("")
+            c1, c2 = st.columns(2)
+            if c1.button("취소", use_container_width=True): st.rerun()
+            if c2.button("저장", type="primary", use_container_width=True):
+                if new_title.strip():
+                    # 세션에 저장된 문서 리스트에서 찾아 이름 업데이트
+                    for f in st.session_state.grouped_files:
+                        if f['id'] == f_id:
+                            f['title'] = new_title.strip()
+                            break
+                    st.toast("문서명이 변경되었습니다.")
+                    st.rerun()
+
         for file in st.session_state.grouped_files:
             
-            # ==========================================
-            # ⭐️ 문서명과 '문제 재생성' 버튼을 나란히 배치하는 구조로 원복
-            # ==========================================
-            col_folder_title, col_regen = st.columns([8, 2])
+            col_folder_title, col_edit, col_regen = st.columns([7.5, 0.5, 2])
             
             with col_folder_title:
-                st.write("") # 버튼과 수직 정렬을 맞추기 위한 여백
+                st.write("") # 수직 정렬
                 st.markdown(f"**📁 {file['title']}** 　<span style='color:#888; font-size:14px;'>(총 {file['total_count']}회 생성 · 업로드: {file['upload_date']})</span>", unsafe_allow_html=True)
-                
+            
+            with col_edit:
+                # 연필 아이콘 클릭 시 변경 팝업 호출
+                if st.button("✏️", key=f"btn_edit_{file['id']}", help="문서 이름 변경"):
+                    rename_doc_dialog(file['id'], file['title'])
+                    
             with col_regen:
                 if st.button("🔄 문제 재생성", key=f"btn_regen_doc_{file['id']}", type="primary", use_container_width=True):
                     st.toast(f"{file['title']} 취약점 기반 재생성 시작!", icon="🚀")
                     
-            # ==========================================
-            # ⭐️ 회차 목록 열기/닫기 (Expander)
-            # ==========================================
             with st.expander("생성된 문제 목록 ▾"):
                 
                 # 미니 테이블 헤더
