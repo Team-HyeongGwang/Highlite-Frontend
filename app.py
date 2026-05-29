@@ -95,7 +95,6 @@ else:
     if 'show_mypage' not in st.session_state: 
         st.session_state.show_mypage = False
         
-    # ⭐️ 핵심: 문서 라이브러리와 오답 노트가 이 grouped_files 하나를 같이 바라보게 합니다.
     if 'grouped_files' not in st.session_state:
         st.session_state.grouped_files = [
             {
