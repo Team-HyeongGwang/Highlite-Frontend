@@ -1,12 +1,11 @@
-# views/upload.py
-from urllib import response
 import streamlit as st
 import requests
+import time
 
-from utils import remove_rank_upload
+BASE_URL = "http://127.0.0.1:8000"
 
 def show_upload_screen():
-    from utils import color_options, add_rank, remove_rank, add_rank_upload, remove_rank_upload, convert_rank_to_json
+    from utils import color_options, add_rank_upload, remove_rank_upload, convert_rank_to_json
 
     # 업로드 화면 전용 임시 상태 초기화
     if 'up_hl_ranks' not in st.session_state:
@@ -14,68 +13,42 @@ def show_upload_screen():
     if 'up_pen_ranks' not in st.session_state:
         st.session_state.up_pen_ranks = st.session_state.pen_ranks.copy()
 
-    # --- 💎 완벽한 앱 디자인을 위한 커스텀 CSS ---
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,800;1,800&display=swap');
-
-        /* 메인 타이틀 */
         .hero-title { font-family: 'Montserrat', sans-serif; font-size: 40px; font-weight: 800; text-align: center; color: var(--text-color); margin-top: 20px; margin-bottom: 10px; letter-spacing: -1.5px; }
         .highlight-text { background: linear-gradient(180deg, rgba(255,255,255,0) 55%, #FFD700 55%); padding: 0 6px; display: inline-block; font-size: 52px; font-style: italic; line-height: 1; margin-right: 2px; }
         .hero-subtitle { font-size: 16px; text-align: center; color: #888; margin-bottom: 50px; font-weight: 500; }
-        
-        /* ⭐️ [개발자 티 탈출] 세련된 스텝(Step) 헤더 디자인 */
         .step-container { display: flex; align-items: center; margin-top: 30px; margin-bottom: 12px; }
-        .step-number { 
-            background-color: #FF4B4B; /* 포인트 컬러 */
-            color: white; 
-            width: 26px; height: 26px; 
-            border-radius: 50%; /* 완벽한 원형 */
-            display: flex; justify-content: center; align-items: center; 
-            font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 14px; 
-            margin-right: 12px;
-            box-shadow: 0 2px 5px rgba(255, 75, 75, 0.3);
-        }
+        .step-number { background-color: #FF4B4B; color: white; width: 26px; height: 26px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 14px; margin-right: 12px; box-shadow: 0 2px 5px rgba(255, 75, 75, 0.3); }
         .step-title-text { font-size: 19px; font-weight: 800; color: var(--text-color); letter-spacing: -0.5px; }
-        
-        /* ⭐️ 스텝 아래쪽 설명문 여백 맞춤 (동그라미 너비만큼 들여쓰기) */
         .step-desc { font-size: 14px; color: #777; margin-left: 38px; margin-bottom: 15px; }
-        
-        /* ⭐️ 순위 뱃지 디자인 (회색 배경으로 모던하게) */
         .rank-label-container { display: flex; align-items: center; margin-top: 10px; margin-bottom: 5px; }
-        .rank-badge {
-            background-color: #F1F3F5; color: #495057; border: 1px solid #DEE2E6;
-            width: 22px; height: 22px; border-radius: 6px; 
-            display: flex; justify-content: center; align-items: center; 
-            font-size: 12px; font-weight: 800; margin-right: 8px;
-        }
+        .rank-badge { background-color: #F1F3F5; color: #495057; border: 1px solid #DEE2E6; width: 22px; height: 22px; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: 800; margin-right: 8px; }
         .rank-text { font-size: 14px; font-weight: 700; color: #343A40; }
-        
-        /* 기본 디바이더 스타일 연하게 조절 */
         hr { margin: 30px 0 !important; border-color: rgba(151,151,151,0.2) !important; }
     </style>
     """, unsafe_allow_html=True)
 
-    # --- 메인 타이틀 영역 ---
     st.markdown("""
     <div class='hero-title'>
         <span class='highlight-text'>Highlight</span>, we'll do the rest.
     </div>
     """, unsafe_allow_html=True)
     st.markdown("<div class='hero-subtitle'>형광펜·필기펜 색상으로 중요도를 추출해 문제와 해설을 자동 생성합니다</div>", unsafe_allow_html=True)
-    
-    # ==========================================
+
+    # ──────────────────────────────────────────
     # [Step 1] 업로드 방식 선택
-    # ==========================================
+    # ──────────────────────────────────────────
     st.markdown("""
     <div class='step-container'>
         <div class='step-number'>1</div>
         <div class='step-title-text'>업로드 방식 선택</div>
     </div>
     """, unsafe_allow_html=True)
-    
+
     upload_type = st.radio("업로드 방식", ["교재에 직접 필기", "교재 + 별도 필기본"], horizontal=True, label_visibility="collapsed")
-    
+
     if upload_type == "교재에 직접 필기":
         st.markdown("<div class='step-desc'>💡 교재 PDF 위에 직접 필기한 경우, 해당 파일을 올려주시면 됩니다. (여러 파일 동시 선택 가능)</div>", unsafe_allow_html=True)
         st.file_uploader("교재 필기본 업로드", key="single_up", accept_multiple_files=True, label_visibility="collapsed")
@@ -88,108 +61,154 @@ def show_upload_screen():
         with c2:
             st.write("**별도 필기본**")
             st.file_uploader("별도 필기본 업로드", key="double_up_2", accept_multiple_files=True, label_visibility="collapsed")
-            
-    st.markdown("<hr>", unsafe_allow_html=True) # 구분선
-    
-    # ==========================================
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ──────────────────────────────────────────
     # [Step 2] 문제 수 설정
-    # ==========================================
+    # ──────────────────────────────────────────
     st.markdown("""
     <div class='step-container'>
         <div class='step-number'>2</div>
         <div class='step-title-text'>생성할 문제 수</div>
     </div>
     """, unsafe_allow_html=True)
-    
-    st.selectbox("수", [10, 15, 20, 25, 30, 35, 40, 45, 50], index=2, label_visibility="collapsed")
-    
-    st.markdown("<hr>", unsafe_allow_html=True) # 구분선
-    
-    # ==========================================
+
+    question_count = st.selectbox("수", [10, 15, 20, 25, 30, 35, 40, 45, 50], index=0, label_visibility="collapsed")
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ──────────────────────────────────────────
     # [Step 3] 중요도 색상 설정
-    # ==========================================
+    # ──────────────────────────────────────────
     st.markdown("""
     <div class='step-container'>
         <div class='step-number'>3</div>
         <div class='step-title-text'>중요도 색상 설정</div>
     </div>
     """, unsafe_allow_html=True)
-    
+
     col_hl_ui, col_pen_ui = st.columns(2)
-    
-    # [형광펜 설정]
+
     with col_hl_ui:
         h_col1, h_col2, h_col3 = st.columns([3, 1, 1])
         with h_col1: st.write("**형광펜** 순위")
         with h_col2: st.button("➕", key="up_add_hl", on_click=add_rank_upload, args=('hl',), use_container_width=True)
         with h_col3: st.button("➖", key="up_rem_hl", on_click=remove_rank_upload, args=('hl',), use_container_width=True)
 
-        # 형광펜 selectbox — hl_ranks 대신 up_hl_ranks 사용
         for i in range(len(st.session_state.up_hl_ranks)):
             label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
-            # ⭐️ 모던해진 순위 뱃지 UI 적용
             st.markdown(f"<div class='rank-label-container'><div class='rank-badge'>{i+1}</div><div class='rank-text'>{label}</div></div>", unsafe_allow_html=True)
             st.session_state.up_hl_ranks[i] = st.selectbox(
                 f"형광펜 {i+1}순위", color_options,
                 index=color_options.index(st.session_state.up_hl_ranks[i]),
                 key=f"up_hl_{i}", label_visibility="collapsed"
             )
-            
-    # [필기펜 설정]
+
     with col_pen_ui:
         p_col1, p_col2, p_col3 = st.columns([3, 1, 1])
         with p_col1: st.write("**필기펜** 순위")
         with p_col2: st.button("➕", key="up_add_pen", on_click=add_rank_upload, args=('pen',), use_container_width=True)
         with p_col3: st.button("➖", key="up_rem_pen", on_click=remove_rank_upload, args=('pen',), use_container_width=True)
 
-        #  필기펜 selectbox — pen_ranks 대신 up_pen_ranks 사용
         for i in range(len(st.session_state.up_pen_ranks)):
             label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
-            # ⭐️ 모던해진 순위 뱃지 UI 적용
             st.markdown(f"<div class='rank-label-container'><div class='rank-badge'>{i+1}</div><div class='rank-text'>{label}</div></div>", unsafe_allow_html=True)
             st.session_state.up_pen_ranks[i] = st.selectbox(
                 f"필기펜 {i+1}순위", color_options,
                 index=color_options.index(st.session_state.up_pen_ranks[i]),
                 key=f"up_pen_{i}", label_visibility="collapsed"
-            )   
-            
+            )
+
     st.markdown("<div style='margin-top: 40px;'></div>", unsafe_allow_html=True)
-    
-    # --- 문제 생성 버튼 및 로딩 (+ DB 저장) ---
-    import time
+
+    # ──────────────────────────────────────────
+    # 문제 생성 버튼 → API 연동
+    # ──────────────────────────────────────────
     if st.button("문제 생성", type="primary", use_container_width=True, key="btn_gen_quiz"):
-        
-        # DB에 저장할 랭킹 정보 저장
+
+        # 랭킹 정보 DB 저장
+        user_id = st.session_state.get("user_id", 1)
         payload = {
             "highlighter_ranking": convert_rank_to_json(st.session_state.up_hl_ranks),
             "pen_ranking": convert_rank_to_json(st.session_state.up_pen_ranks)
         }
-        
-        # 랭킹 정보 저장 API 호출 (터미널 로그만 남김)
         try:
-            response = requests.post(
-                f"http://localhost:8000/rank/colors/{USER_ID}",
+            rank_response = requests.post(
+                f"{BASE_URL}/rank/colors/{user_id}",
                 json=payload,
                 timeout=30
             )
-            if response.status_code == 200:
-                print(f"✅ 유저 {USER_ID} 색상 랭킹 DB 저장 완료!") # 터미널(명령 프롬프트)에만 출력됨
-                # DB 저장 성공 시 사이드바 반영
+            if rank_response.status_code == 200:
+                print(f"✅ 유저 {user_id} 색상 랭킹 DB 저장 완료!")
                 st.session_state.hl_ranks = st.session_state.up_hl_ranks.copy()
                 st.session_state.pen_ranks = st.session_state.up_pen_ranks.copy()
             else:
-                print(f"⚠️ DB 저장 실패 (상태코드: {response.status_code})")
+                print(f"⚠️ DB 저장 실패 (상태코드: {rank_response.status_code})")
         except Exception as e:
             print(f"⚠️ 백엔드 통신 오류: {e}")
-        
+
+        # 문제 생성 API 호출
         with st.status("AI 1타 강사가 문서를 분석하고 있습니다...", expanded=True) as status:
             st.write("🔍 PDF 텍스트 및 중요도 색상(형광펜/필기펜) 추출 중...")
-            time.sleep(1.5) 
+            time.sleep(0.5)
             st.write("🧠 AI 모델이 핵심 개념을 바탕으로 문제 출제 중...")
-            time.sleep(1.5) 
-            st.write("✨ 해설 작성 및 최종 검수 중...")
-            time.sleep(1.5) 
-            status.update(label="문제 생성 완료!", state="complete", expanded=False)
-            
-        st.success("총 20문제가 성공적으로 생성되었습니다! 사이드바의 '문제 풀이'로 이동하세요.")
-        st.balloons()
+
+            try:
+                group_id = st.session_state.get("group_id")
+                document_id = st.session_state.get("document_id")
+
+                # RAG 연동 전 임시 더미값 사용 (연동 완료 후 아래 두 줄 삭제)
+                group_id = st.session_state.get("group_id", "11f49711-ee36-4c97-abc4-4691629a1f82")
+                document_id = st.session_state.get("document_id", "2edcce3c-c4b8-4f22-ab44-8234bb41fe95")
+                st.session_state.document_id = document_id  # 문자열 uuid로 저장
+
+                # RAG 연동 완료 후 아래 주석 해제
+                # if not group_id:
+                #     status.update(label="생성 실패", state="error", expanded=False)
+                #     st.error("문서 정보가 없습니다. PDF를 먼저 업로드해주세요.")
+                #     st.stop()
+
+                response = requests.post(
+                    f"{BASE_URL}/question/generate",
+                    json={
+                        "group_id": group_id,
+                        "question_count": question_count
+                    },
+                    timeout=300
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+                    questions = result.get("questions", [])
+
+                    if questions:
+                        st.session_state.questions = questions
+                        st.session_state.user_id = user_id
+                        st.session_state.document_id = document_id
+                        st.session_state.quiz_phase = "first_attempt"
+                        st.session_state.quiz_result = {}
+                        st.session_state.retry_counts = {}
+
+                        st.write("✨ 해설 작성 및 최종 검수 중...")
+                        time.sleep(0.5)
+                        status.update(label="문제 생성 완료!", state="complete", expanded=False)
+                        st.success(f"총 {len(questions)}문제가 성공적으로 생성되었습니다! 사이드바의 '문제 풀이'로 이동하세요.")
+                        st.balloons()
+                    else:
+                        status.update(label="생성 실패", state="error", expanded=False)
+                        st.error("문제가 생성되지 않았습니다. DB에 데이터가 있는지 확인해주세요.")
+
+                elif response.status_code == 404:
+                    status.update(label="생성 실패", state="error", expanded=False)
+                    st.error("해당 문서의 중요도 분석 결과가 없습니다. PDF를 먼저 업로드해주세요.")
+                else:
+                    status.update(label="생성 실패", state="error", expanded=False)
+                    st.error(f"오류가 발생했습니다. (status: {response.status_code})")
+
+            except requests.exceptions.Timeout:
+                status.update(label="시간 초과", state="error", expanded=False)
+                st.error("문제 생성 시간이 초과되었습니다. 다시 시도해주세요.")
+            except Exception as e:
+                status.update(label="연결 오류", state="error", expanded=False)
+                st.error(f"서버 연결 오류: {e}")

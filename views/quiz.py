@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import time
 
 BASE_URL = "http://127.0.0.1:8000"
 
@@ -101,10 +102,27 @@ def show_feedback_dialog(q_id, q):
                         st.session_state.questions[i]["options"] = new_q.get("options")
                         st.session_state.questions[i]["answer"] = new_q["answer"]
                         st.session_state.questions[i]["explanation"] = new_q["explanation"]
+                        
+                        # 해당 문제 인덱스 찾아서 답안 초기화
+                        q_idx = i
+                        if f"ans_{q_idx}" in st.session_state:
+                            del st.session_state[f"ans_{q_idx}"]
+                        
+                        # 채점 결과에서도 해당 문제 제거
+                        if "quiz_result" in st.session_state:
+                            results = st.session_state.quiz_result.get("results", [])
+                            st.session_state.quiz_result["results"] = [
+                                r for r in results if r["question_id"] != q["question_id"]
+                            ]
                         break
+                
+                # quiz_phase를 first_attempt로 되돌리기
+                st.session_state.quiz_phase = "first_attempt"
                 st.session_state.retry_counts[q_id] = retry_count + 1
-                st.toast(f"{q_id} 문항이 재생성되었습니다!", icon="✅")
+                st.success(f"{q_id} 문항이 재생성되었습니다! 다시 풀어보세요 ✅")
+                time.sleep(1.5)
                 st.rerun()
+                
             elif response.status_code == 400:
                 st.toast("재생성은 최대 3회까지만 가능합니다.", icon="⚠️")
             else:
@@ -275,7 +293,7 @@ def show_quiz_screen():
 
             exp_col, fb_col = st.columns([12, 1])
             with exp_col:
-                with st.expander("해설 보기 ▾", expanded=is_graded):
+                with st.expander("해설 보기", expanded=is_graded):
                     st.write(q['exp'])
             with fb_col:
                 if st.button("🚩", key=f"btn_fb_{q['id']}_{st.session_state.quiz_phase}", help="문제 오류 신고 및 피드백 남기기"):
@@ -304,8 +322,8 @@ def show_quiz_screen():
                 response = requests.post(
                     f"{BASE_URL}/question/submit",
                     json={
-                        "user_id": st.session_state.get("user_id", 1),
-                        "document_id": st.session_state.get("document_id", 1),
+                        "user_id": str(st.session_state.get("user_id", 1)),
+                        "document_id": str(st.session_state.get("document_id", "2edcce3c-c4b8-4f22-ab44-8234bb41fe95")),
                         "attempt_phase": "first_attempt",
                         "answers": answers
                     }
@@ -339,7 +357,7 @@ def show_quiz_screen():
                     f"{BASE_URL}/question/submit",
                     json={
                         "user_id": st.session_state.get("user_id", 1),
-                        "document_id": st.session_state.get("document_id", 1),
+                        "document_id": st.session_state.get("document_id", "2edcce3c-c4b8-4f22-ab44-8234bb41fe95"),
                         "attempt_phase": "regenerated",
                         "answers": answers
                     }
