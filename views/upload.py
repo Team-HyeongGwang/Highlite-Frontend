@@ -2,6 +2,7 @@
 from urllib import response
 import streamlit as st
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from utils import remove_rank_upload
 
@@ -174,26 +175,34 @@ def show_upload_screen():
                     }
                 )
         else:
-            for file in (st.session_state.get("double_up_1") or []):
-                requests.post(
+            # 파일을 2개 입력 받은 경우 : 병렬 처리
+            def upload_file(file, mode, doc_type):
+                return requests.post(
                     "http://localhost:8000/retrieval/upload-pdf",
                     files={"file": (file.name, file.read(), "application/pdf")},
                     data={
                         "user_id": USER_ID,
-                    "doc_type": json.dumps({"mode": "combined", "type": "textbook"})
-                }
-            )
-            for file in (st.session_state.get("double_up_2") or []):
-                requests.post(
-                    "http://localhost:8000/retrieval/upload-pdf",
-                    files={"file": (file.name, file.read(), "application/pdf")},
-                    data={
-                        "user_id": USER_ID,
-                        "doc_type": json.dumps({"mode": "combined", "type": "notes"})
+                        "doc_type": json.dumps({"mode": mode, "type": doc_type})
                     }
                 )
-    
-        
+
+            if upload_type == "교재에 직접 필기":
+                files_to_upload = [(file, "single", None) for file in (st.session_state.get("single_up") or [])]
+            else:
+                files_to_upload = (
+                    [(file, "combined", "textbook") for file in (st.session_state.get("double_up_1") or [])] +
+                    [(file, "combined", "notes") for file in (st.session_state.get("double_up_2") or [])]
+                )
+
+            with ThreadPoolExecutor() as executor:
+                futures = [executor.submit(upload_file, file, mode, doc_type) for file, mode, doc_type in files_to_upload]
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        print(f"⚠️ 업로드 실패: {e}")
+
+
         # DB에 저장할 랭킹 정보 저장
         payload = {
             "highlighter_ranking": convert_rank_to_json(st.session_state.up_hl_ranks),
