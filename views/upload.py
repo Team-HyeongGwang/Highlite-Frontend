@@ -159,6 +159,38 @@ def show_upload_screen():
     import time
     if st.button("문제 생성", type="primary", use_container_width=True, key="btn_gen_quiz"):
         
+        # 파일 업로드 먼저
+        if upload_type == "교재에 직접 필기":
+            for file in (st.session_state.get("single_up") or []):
+                requests.post(
+                    "http://localhost:8000/retrieval/upload-pdf",
+                    files={"file": (file.name, file.read(), "application/pdf")},
+                    data={
+                        "user_id": USER_ID,
+                        "doc_type": json.dumps({"mode": "single", "type": None})
+                    }
+                )
+        else:
+            for file in (st.session_state.get("double_up_1") or []):
+                requests.post(
+                    "http://localhost:8000/retrieval/upload-pdf",
+                    files={"file": (file.name, file.read(), "application/pdf")},
+                    data={
+                        "user_id": USER_ID,
+                    "doc_type": json.dumps({"mode": "combined", "type": "textbook"})
+                }
+            )
+            for file in (st.session_state.get("double_up_2") or []):
+                requests.post(
+                    "http://localhost:8000/retrieval/upload-pdf",
+                    files={"file": (file.name, file.read(), "application/pdf")},
+                    data={
+                        "user_id": USER_ID,
+                        "doc_type": json.dumps({"mode": "combined", "type": "notes"})
+                    }
+                )
+    
+        
         # DB에 저장할 랭킹 정보 저장
         payload = {
             "highlighter_ranking": convert_rank_to_json(st.session_state.up_hl_ranks),
