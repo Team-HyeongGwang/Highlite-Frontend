@@ -1,4 +1,7 @@
 import streamlit as st
+import requests
+
+BASE_URL = "http://127.0.0.1:8000"
 
 # ----------------------------------------------------
 # 💡 문제 유형별 렌더링 컴포넌트 
@@ -45,28 +48,25 @@ def show_review_screen():
         st.session_state.resolved_questions = {}
 
     if 'grouped_reviews' not in st.session_state:
-        st.session_state.grouped_reviews = [
-            {
-                "id": "doc_1", "title": "경제학원론_3장.pdf", "total_count": 3,
-                "attempts": [
-                    {"id": "rev_103", "round": 3, "date": "방금 전", "total": 18, "correct": 18, "wrong": 0},
-                    {"id": "rev_102", "round": 2, "date": "오늘 16:00", "total": 18, "correct": 15, "wrong": 3},
-                    {"id": "rev_101", "round": 1, "date": "오늘 14:35", "total": 18, "correct": 14, "wrong": 4}
-                ]
-            },
-            {
-                "id": "doc_2", "title": "미시경제_챕터4_수정.pdf", "total_count": 1,
-                "attempts": [
-                    {"id": "rev_104", "round": 1, "date": "어제 20:00", "total": 14, "correct": 14, "wrong": 0} 
-                ]
-            }
-        ]
+        user_id = st.session_state.get("user_id", 1)
+        group_id = st.session_state.get("group_id")
+        if group_id:
+            try:
+                resp = requests.get(
+                    f"{BASE_URL}/personalized/quiz-results/{user_id}/{group_id}",
+                    timeout=5
+                )
+                st.session_state.grouped_reviews = resp.json() if resp.status_code == 200 else []
+            except Exception:
+                st.session_state.grouped_reviews = []
+        else:
+            st.session_state.grouped_reviews = []
 
     # ==========================================
     # 필터링 로직 (오답이 있는 회차만)
     # ==========================================
     filtered_reviews = []
-    for file in st.session_state.grouped_files:
+    for file in st.session_state.grouped_reviews:
         wrong_attempts = [a for a in file['attempts'] if a['wrong'] > 0]
         if len(wrong_attempts) > 0:
             new_file = file.copy()
@@ -87,23 +87,17 @@ def show_review_screen():
                     break
             if selected_file: break
             
-        mock_wrong_questions = [
-            {
-                "id": "Q02", "imp": "O", "type": "OX", 
-                "text": "기회비용은 회계장부에 기록되는 명시적 비용만을 의미한다.", 
-                "my_ans": "O", "correct": "X",
-                "source": "p.14 · 형광펜에서 추출", 
-                "exp": "기회비용은 명시적 비용 + 암묵적 비용을 모두 포함하므로 명시적 비용만 기록하는 회계장부 비용보다 일반적으로 큽니다."
-            },
-            {
-                "id": "Q05", "imp": "R", "type": "객관식", 
-                "text": "수요의 가격탄력성이 완전 비탄력적일 때, 수요 곡선의 형태는?", 
-                "options": ["① 우상향한다", "② 우하향한다", "③ 수평선이다", "④ 수직선이다"],
-                "my_ans": "③ 수평선이다", "correct": "④ 수직선이다",
-                "source": "p.18 · 필기펜에서 추출", 
-                "exp": "수요가 완전 비탄력적(탄력성=0)일 경우, 가격이 변해도 수요량이 전혀 변하지 않으므로 수요 곡선은 수직선 형태를 띱니다."
-            }
-        ]
+        cache_key = f"wrong_qs_{st.session_state.selected_review_id}"
+        if cache_key not in st.session_state:
+            try:
+                resp = requests.get(
+                    f"{BASE_URL}/personalized/wrong-answers/{st.session_state.selected_review_id}",
+                    timeout=5
+                )
+                st.session_state[cache_key] = resp.json() if resp.status_code == 200 else []
+            except Exception:
+                st.session_state[cache_key] = []
+        wrong_questions = st.session_state[cache_key]
 
         # 현재 회차의 해결된 문제 ID 집합
         attempt_id = st.session_state.selected_review_id
@@ -124,7 +118,7 @@ def show_review_screen():
             st.markdown("### 📝 오답 다시 풀기", unsafe_allow_html=True)
 
             # ✅ 아직 해결되지 않은 문제만 다시 풀기 대상으로 필터링
-            retry_questions = [q for q in mock_wrong_questions if q['id'] not in resolved_set]
+            retry_questions = [q for q in wrong_questions if q['id'] not in resolved_set]
 
             if len(retry_questions) == 0:
                 st.success("🎉 모든 오답 문제를 해결했습니다! 완벽하게 보완했어요.")
@@ -136,7 +130,7 @@ def show_review_screen():
                 return
 
             remaining = len(retry_questions)
-            total_wrong = len(mock_wrong_questions)
+            total_wrong = len(wrong_questions)
             solved_count = len(resolved_set)
 
             if solved_count > 0:
@@ -234,12 +228,12 @@ def show_review_screen():
                     if key.startswith("view_ans_"): del st.session_state[key]
                 st.rerun()
         with btn_c2:
-            all_resolved = len(resolved_set) >= len(mock_wrong_questions)
+            all_resolved = len(resolved_set) >= len(wrong_questions)
             retry_label = "모두 해결 완료!" if all_resolved else "오답 다시 풀기 ↻"
             if st.button(retry_label, type="primary", use_container_width=True, disabled=all_resolved):
                 st.session_state.retry_mode_active = True
                 st.session_state.retry_graded = False
-                for q in mock_wrong_questions:
+                for q in wrong_questions:
                     # 해결 안 된 문제 답변만 초기화
                     if q['id'] not in resolved_set:
                         ans_key = f"retry_ans_{q['id']}"
@@ -250,7 +244,7 @@ def show_review_screen():
         st.write("")
 
         if len(resolved_set) > 0:
-            total_wrong = len(mock_wrong_questions)
+            total_wrong = len(wrong_questions)
             solved_count = len(resolved_set)
             progress_val = solved_count / total_wrong
             st.markdown(f"<div style='font-size: 13px; color: #888; margin-bottom: 4px;'>해결 현황: {solved_count} / {total_wrong} 문제</div>", unsafe_allow_html=True)
@@ -261,8 +255,8 @@ def show_review_screen():
         st.caption(f"총 {selected_attempt['wrong']}개의 오답을 모아봤습니다. 취약점을 완벽하게 보완해 보세요!")
         st.divider()
 
-        unresolved_qs = [q for q in mock_wrong_questions if q['id'] not in resolved_set]
-        resolved_qs   = [q for q in mock_wrong_questions if q['id'] in resolved_set]
+        unresolved_qs = [q for q in wrong_questions if q['id'] not in resolved_set]
+        resolved_qs   = [q for q in wrong_questions if q['id'] in resolved_set]
 
         def render_wrong_question_card(q, is_resolved=False):
             """오답 카드 렌더링 - is_resolved=True 이면 흐리게 + 해결 배지 표시"""
