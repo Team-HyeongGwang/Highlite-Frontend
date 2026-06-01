@@ -84,15 +84,15 @@ def show_review_screen():
         st.session_state.retry_graded = False
     if 'resolved_questions' not in st.session_state:
         st.session_state.resolved_questions = {}
+    if 'retry_result' not in st.session_state:
+        st.session_state.retry_result = {}
 
-    # library.py에서 오답 버튼 클릭 시 selected_quiz_result_id 세팅됨
     quiz_result_id = st.session_state.get("selected_quiz_result_id")
 
     # ──────────────────────────────────────────
-    # [화면 A/C] 오답 상세 보기 (quiz_result_id 있을 때)
+    # [화면 A/C] 오답 상세 보기
     # ──────────────────────────────────────────
     if quiz_result_id:
-        # API에서 오답 데이터 가져오기
         try:
             response = requests.get(
                 f"{BASE_URL}/question/wrong-answers",
@@ -112,7 +112,10 @@ def show_review_screen():
             st.info("오답이 없습니다.")
             return
 
-        # 해결된 문제 ID 집합
+        # 문서 정보 가져오기 (제목, 회차)
+        doc_title = st.session_state.get("review_doc_title", "문서")
+        doc_round = st.session_state.get("review_doc_round", "")
+
         resolved_set = st.session_state.resolved_questions.get(str(quiz_result_id), set())
 
         # ──────────────────────────────────────────
@@ -124,6 +127,7 @@ def show_review_screen():
                 if st.button("← 돌아가기"):
                     st.session_state.retry_mode_active = False
                     st.session_state.retry_graded = False
+                    st.session_state.retry_result = {}
                     st.rerun()
 
             st.write("")
@@ -137,6 +141,7 @@ def show_review_screen():
                 if st.button("오답 노트로 돌아가기", type="primary"):
                     st.session_state.retry_mode_active = False
                     st.session_state.retry_graded = False
+                    st.session_state.retry_result = {}
                     st.rerun()
                 return
 
@@ -159,10 +164,14 @@ def show_review_screen():
                     if str(user_choice).strip() == q['correct']:
                         correct_count += 1
                 st.write("")
-                st.markdown(f"<div style='text-align: center; font-size: 20px; font-weight: bold;'>총 {len(retry_questions)}문제 중 {correct_count}문제 정답!</div>", unsafe_allow_html=True)
+                # ← 초록 박스로 채점 결과 표시
+                st.success(f"총 {len(retry_questions)}문제 중 **{correct_count}문제**를 맞혔습니다. (정답률 {round(correct_count / len(retry_questions) * 100) if retry_questions else 0}%)")
                 if correct_count == len(retry_questions):
                     st.balloons()
                 st.write("")
+
+            imp_map = {"R": "r", "O": "o", "Y": "y"}
+            imp_label = {"R": "핵심", "O": "중요", "Y": "참고"}
 
             for q in retry_questions:
                 with st.container(border=True):
@@ -173,8 +182,6 @@ def show_review_screen():
                     if is_graded:
                         mark = "<span style='color: #28A745; font-size: 17px;'>⭕</span> " if is_correct else "<span style='color: #FF4B4B; font-size: 17px;'>❌</span> "
 
-                    imp_map = {"R": "r", "O": "o", "Y": "y"}
-                    imp_label = {"R": "핵심", "O": "중요", "Y": "참고"}
                     c1, c2 = st.columns([7, 3])
                     with c1:
                         imp_class = f"tag-{imp_map.get(q['imp'], 'y')}"
@@ -257,20 +264,25 @@ def show_review_screen():
             st.progress(solved_count / total_wrong)
             st.write("")
 
-        st.markdown(f"### 오답 노트 <span style='font-size: 16px; color: #888;'>(총 {len(wrong_answers)}개 오답)</span>", unsafe_allow_html=True)
-        st.caption("틀린 문제들을 확인하고 취약점을 보완해 보세요!")
+        # ← 문서이름 (n회차) 오답 노트 형식으로 출력
+        st.markdown(
+            f"### {doc_title} <span style='font-size: 20px; color: #888;'>({doc_round}회차)</span> 오답 노트",
+            unsafe_allow_html=True
+        )
+        st.caption(f"총 {len(wrong_answers)}개의 오답을 모아봤습니다. 취약점을 완벽하게 보완해 보세요!")
         st.divider()
 
         unresolved_qs = [q for q in wrong_answers if q['id'] not in resolved_set]
         resolved_qs = [q for q in wrong_answers if q['id'] in resolved_set]
+
+        imp_map = {"R": "r", "O": "o", "Y": "y"}
+        imp_label = {"R": "핵심", "O": "중요", "Y": "참고"}
 
         def render_wrong_question_card(q, is_resolved=False):
             if is_resolved:
                 st.markdown("<div style='opacity: 0.45; pointer-events: none;'>", unsafe_allow_html=True)
 
             with st.container(border=True):
-                imp_map = {"R": "r", "O": "o", "Y": "y"}
-                imp_label = {"R": "핵심", "O": "중요", "Y": "참고"}
                 c1, c2 = st.columns([7, 3])
                 with c1:
                     imp_class = f"tag-{imp_map.get(q['imp'], 'y')}"
@@ -322,7 +334,6 @@ def show_review_screen():
         st.warning("로그인이 필요합니다.")
         return
 
-    # API에서 문서 목록 가져오기
     try:
         response = requests.get(
             f"{BASE_URL}/question/list",
@@ -343,13 +354,12 @@ def show_review_screen():
         for attempt in doc.get("attempts", []):
             score = attempt.get("score")
             q_num = attempt.get("q_num", 0)
-            # 점수가 있고 100%가 아닌 경우만
-            if score is not None and score < 100:
+            if score is not None and score < 100 and attempt.get("quiz_result_id"):
                 correct = round(q_num * score / 100)
                 wrong = q_num - correct
                 wrong_attempts.append({
-                    "id": str(attempt.get("quiz_result_id", attempt.get("quiz_group_id"))),
-                    "quiz_result_id": attempt.get("quiz_result_id"),
+                    "id": str(attempt["quiz_result_id"]),
+                    "quiz_result_id": attempt["quiz_result_id"],
                     "round": attempt["round"],
                     "date": attempt["created_at"][:16].replace("T", " "),
                     "total": q_num,
@@ -371,7 +381,6 @@ def show_review_screen():
         st.markdown("<p style='color: #888; font-size: 15px;'>문제를 풀고 채점하면 틀린 문제들이 이곳에 차곡차곡 쌓입니다!</p>", unsafe_allow_html=True)
         return
 
-    # 선택 및 삭제
     selected_attempts = []
     for file in filtered_reviews:
         for attempt in file['attempts']:
@@ -429,7 +438,7 @@ def show_review_screen():
     st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
 
     for file in filtered_reviews:
-        with st.expander(f"📁 **{file['title']}** (총 {file['total_count']}회 오답 기록)", expanded=True):  # ← expanded=True
+        with st.expander(f"📁 **{file['title']}** (총 {file['total_count']}회 오답 기록)", expanded=True):
 
             inner_cols = st.columns([0.5, 1.5, 2.5, 1.5, 1.5, 1.5, 2])
             with inner_cols[0]: st.write("")
@@ -465,11 +474,11 @@ def show_review_screen():
 
                 with row_cols[6]:
                     if st.button("오답 보기 ↗", key=f"btn_view_wr_{attempt['id']}", use_container_width=True):
-                        if attempt.get("quiz_result_id"):
-                            st.session_state.selected_quiz_result_id = attempt["quiz_result_id"]
-                            st.session_state.current_page = "review"
-                            st.rerun()
-                        else:
-                            st.toast("채점 기록이 없습니다.", icon="⚠️")
+                        # ← 문서 제목과 회차 세션에 저장
+                        st.session_state.selected_quiz_result_id = attempt["quiz_result_id"]
+                        st.session_state.review_doc_title = file["title"]
+                        st.session_state.review_doc_round = attempt["round"]
+                        st.session_state.current_page = "review"
+                        st.rerun()
 
                 st.markdown("<div style='margin-bottom: 5px;'></div>", unsafe_allow_html=True)
