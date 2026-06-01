@@ -76,20 +76,29 @@ def show_library_screen():
         c1, c2 = st.columns(2)
         if c1.button("취소", use_container_width=True): st.rerun()
         if c2.button("확인", type="primary", use_container_width=True):
+
+            # ← quiz_group_id 수집
+            quiz_group_ids = []
             quiz_result_ids = []
             for f_id, a_id in selected_attempts:
                 for file in grouped_files:
                     if file['id'] == f_id:
                         for attempt in file['attempts']:
                             if attempt['id'] == a_id:
+                                if attempt.get('quiz_group_id'):
+                                    quiz_group_ids.append(str(attempt['quiz_group_id']))
                                 if attempt.get('quiz_result_id'):
                                     quiz_result_ids.append(int(attempt['quiz_result_id']))
 
-            if quiz_result_ids:
+            if quiz_group_ids:
                 try:
                     del_response = requests.delete(
                         f"{BASE_URL}/question/quiz-result",
-                        json={"user_id": user_id, "quiz_result_ids": quiz_result_ids},
+                        json={
+                            "user_id": user_id,
+                            "quiz_result_ids": quiz_result_ids,
+                            "quiz_group_ids": quiz_group_ids,  # ← 추가
+                        },
                         timeout=30
                     )
                     if del_response.status_code == 200:
