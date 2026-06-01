@@ -86,7 +86,12 @@ def show_review_screen():
                     selected_attempt = a
                     break
             if selected_file: break
-            
+
+        if selected_file is None:
+            st.session_state.selected_review_id = None
+            st.rerun()
+            return
+
         cache_key = f"wrong_qs_{st.session_state.selected_review_id}"
         if cache_key not in st.session_state:
             try:
