@@ -71,7 +71,7 @@ if "token" in st.query_params:
     try:
         decoded = jwt.decode(token, options={"verify_signature": False})
         st.session_state["user_info"] = {
-            "user_id": decoded.get("user_id", 9),
+            "user_id": decoded.get("user_id"),
             "username": decoded.get("username", "이름 없음"),
             "email": decoded.get("sub", "이메일 없음"),
             "profile_image_url": decoded.get("picture"),
@@ -100,10 +100,23 @@ else:
     
     if 'show_mypage' not in st.session_state: 
         st.session_state.show_mypage = False
-    if 'library_files' not in st.session_state:
-        st.session_state.library_files = [
-            {"id": 1, "name": "경제학원론_3장.pdf", "date": "오늘 14:32", "count": 3, "q_num": 18, "score": "78%"},
-            {"id": 2, "name": "미시경제_챕터4_수정.pdf", "date": "어제", "count": 1, "q_num": 14, "score": "92%"}
+        
+    if 'grouped_files' not in st.session_state:
+        st.session_state.grouped_files = [
+            {
+                "id": "doc_1", "title": "경제학원론_3장.pdf", "upload_date": "오늘 14:32", "total_count": 3,
+                "attempts": [
+                    {"id": "rev_103", "round": 3, "q_num": 18, "score": "-", "date": "방금 전", "total": 18, "correct": 18, "wrong": 0},
+                    {"id": "rev_102", "round": 2, "q_num": 18, "score": "85%", "date": "오늘 16:00", "total": 18, "correct": 15, "wrong": 3},
+                    {"id": "rev_101", "round": 1, "q_num": 18, "score": "78%", "date": "오늘 14:35", "total": 18, "correct": 14, "wrong": 4}
+                ]
+            },
+            {
+                "id": "doc_2", "title": "미시경제_챕터4_수정.pdf", "upload_date": "어제", "total_count": 1,
+                "attempts": [
+                    {"id": "rev_104", "round": 1, "q_num": 14, "score": "92%", "date": "어제 20:00", "total": 14, "correct": 14, "wrong": 0} 
+                ]
+            }
         ]
 
     color_hex = {
@@ -206,6 +219,13 @@ else:
                 },
             }
         )
+
+        if 'current_menu' not in st.session_state:
+            st.session_state.current_menu = menu
+            
+        if menu != st.session_state.current_menu:
+            st.session_state.current_menu = menu
+            st.session_state.show_mypage = False
         
         st.markdown("---")
         
