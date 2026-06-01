@@ -137,11 +137,23 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
         st.session_state[key] = prefill_ans
 
     if q['type'] == "객관식":
+        options = q.get('options', [])
+        current_val = st.session_state.get(key)
+
+        # 현재 세션값과 일치하는 옵션 인덱스 찾기
+        try:
+            selected_index = next(
+                (i for i, opt in enumerate(options) if current_val and opt.startswith(current_val)),
+                None
+            )
+        except Exception:
+            selected_index = None
+
         return st.radio(
             "보기",
-            options=q.get('options', []),
+            options=options,
             key=key,
-            index=None,
+            index=selected_index,
             label_visibility="collapsed",
             disabled=is_disabled
         )
@@ -161,6 +173,10 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
         return st.session_state.get(key)
 
     elif q['type'] == "빈칸채우기":
+        # prefill_ans가 있으면 세션에 미리 채워줌 (review 모드에서 이전 답 표시)
+        if prefill_ans and key not in st.session_state:
+            st.session_state[key] = prefill_ans
+
         return st.text_input(
             "정답 입력",
             key=key,
@@ -225,34 +241,34 @@ def show_quiz_screen():
     # ────────────────────────────────────────
     # 상단 헤더
     # ────────────────────────────────────────
-    head_col1, head_col2 = st.columns([8, 2])
-
-    with head_col1:
-        if st.session_state.quiz_phase == "first_attempt":
-            badge = "<span style='background:#E8F0FE; color:#1A73E8; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; margin-right:8px;'>문제 풀이</span>"
-        elif st.session_state.quiz_phase == "retake":
-            badge = "<span style='background:#FCE8E6; color:#D93025; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; margin-right:8px;'>재풀이 (기록X)</span>"
-        else:
-            badge = f"<span style='background:#E6F4EA; color:#1E8E3E; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; margin-right:8px;'>채점 완료 {correct_count}/{num_q}</span>"
-
-        r_count = sum(1 for q in questions if q['imp'] == 'R')
-        o_count = sum(1 for q in questions if q['imp'] == 'O')
-        y_count = sum(1 for q in questions if q['imp'] == 'Y')
-
-        st.markdown(
-            f"<div style='margin-top: 15px; font-size: 16px;'>{badge} <b>문제 풀이</b> <span style='color: #888; font-size: 14px;'>· 총 {num_q}문항 · R {r_count} / O {o_count} / Y {y_count}</span></div>",
-            unsafe_allow_html=True
-        )
-
-    with head_col2:
-        if st.session_state.quiz_phase == "review":
-            if st.button("다시 풀기 ↻", use_container_width=True):
-                for key in list(st.session_state.keys()):
-                    if key.startswith("ans_") or key.startswith("retry_"):
-                        del st.session_state[key]
-                st.session_state.quiz_phase = "retake"
+    # 목록 돌아가기 + 다시 풀기 버튼 같은 행에 배치
+    if st.session_state.get("current_page") == "quiz":
+        btn_left, btn_space, btn_right = st.columns([2, 6, 2.5])
+        with btn_left:
+            if st.button("← 목록으로 돌아가기"):
+                st.session_state.current_page = None
+                st.session_state.current_menu = "문서 라이브러리"
                 st.rerun()
-
+        with btn_right:
+            if st.session_state.quiz_phase == "review":
+                if st.button("다시 풀기 ↻", type="primary", use_container_width=True):
+                    for key in list(st.session_state.keys()):
+                        if key.startswith("ans_") or key.startswith("retry_"):
+                            del st.session_state[key]
+                    st.session_state.quiz_phase = "retake"
+                    st.rerun()
+    else:
+        # 라이브러리 외부(업로드 등)에서 진입 시 다시 풀기만 표시
+        _, btn_right = st.columns([9.5, 2.5])
+        with btn_right:
+            if st.session_state.quiz_phase == "review":
+                if st.button("다시 풀기 ↻", type="primary", use_container_width=True):
+                    for key in list(st.session_state.keys()):
+                        if key.startswith("ans_") or key.startswith("retry_"):
+                            del st.session_state[key]
+                    st.session_state.quiz_phase = "retake"
+                    st.rerun()
+    
     # ────────────────────────────────────────
     # 필터 (핵심/중요/참고 → R/O/Y 매핑)
     # ────────────────────────────────────────

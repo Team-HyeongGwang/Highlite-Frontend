@@ -47,6 +47,7 @@ def show_library_screen():
         grouped_files.append({
             "id": str(doc["document_id"]),
             "document_id": doc["document_id"],
+            "group_id": doc.get("group_id"),  # ← 추가
             "title": doc["title"],
             "upload_date": doc["upload_date"][:16].replace("T", " "),
             "total_count": doc["total_count"],
@@ -127,7 +128,7 @@ def show_library_screen():
         with col_regen:
             if st.button("🔄 문제 재생성", key=f"btn_regen_doc_{file['id']}", type="primary", use_container_width=True):
                 doc_id = str(file.get("document_id"))
-                group_id = st.session_state.get("group_id")
+                group_id = file.get("group_id")  # ← 세션 대신 file에서 가져오기
 
                 if not doc_id or not group_id:
                     st.toast("문서 정보가 없습니다.", icon="⚠️")
@@ -193,9 +194,6 @@ def show_library_screen():
                             st.markdown(f"<span style='color: {score_color}; font-weight: 800; line-height: 2.2;'>{attempt['score']}</span>", unsafe_allow_html=True)
 
                         with c_q:
-                            # ──────────────────────────────────────────
-                            # 문제 버튼 → quiz_group_id로 해당 회차 문제 + 채점결과 불러오기
-                            # ──────────────────────────────────────────
                             if st.button("문제", key=f"btn_q_{attempt['id']}", use_container_width=True):
                                 quiz_group_id = attempt.get("quiz_group_id")
                                 if not quiz_group_id:
@@ -215,11 +213,9 @@ def show_library_screen():
                                             st.session_state.retry_counts = {}
 
                                             if attempt['score'] == "-":
-                                                # 채점 기록 없음 → 새로 풀기
                                                 st.session_state.quiz_phase = "first_attempt"
                                                 st.session_state.quiz_result = {}
                                             else:
-                                                # 채점 기록 있음 → quiz_result 불러오기
                                                 st.session_state.quiz_phase = "review"
                                                 quiz_result_id = attempt.get("quiz_result_id")
                                                 if quiz_result_id:
@@ -244,9 +240,6 @@ def show_library_screen():
                                         st.toast(f"서버 연결 오류: {e}", icon="❌")
 
                         with c_w:
-                            # ──────────────────────────────────────────
-                            # 오답 버튼 → quiz_result_id로 오답 화면 이동
-                            # ──────────────────────────────────────────
                             if st.button("오답", key=f"btn_w_{attempt['id']}", use_container_width=True):
                                 if attempt['score'] == "-":
                                     st.toast("아직 문제를 푼 기록이 없습니다.")
