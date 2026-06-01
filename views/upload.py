@@ -1,6 +1,8 @@
 import streamlit as st
+import uuid
 import requests
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 BASE_URL = "http://127.0.0.1:8000"
 
@@ -136,6 +138,43 @@ def show_upload_screen():
             st.error("로그인이 필요합니다.")
             return
         
+    
+        group_id = str(uuid.uuid4())
+
+        # 업로드 함수 정의
+        def upload_file(file, mode, doc_type):
+            return requests.post(
+                "http://localhost:8000/retrieval/upload-pdf",
+                files={"file": (file.name, file.read(), "application/pdf")},
+                data={
+                    "user_id": USER_ID,
+                    "group_id": group_id,
+                    "doc_type": json.dumps({"mode": mode, "type": doc_type})
+                }
+            )
+
+        # 업로드할 파일 목록 구성
+        if upload_type == "교재에 직접 필기":
+            files_to_upload = [
+                (file, "single", None) 
+                for file in (st.session_state.get("single_up") or [])
+            ]
+        else:
+            files_to_upload = (
+                [(file, "combined", "textbook") for file in (st.session_state.get("double_up_1") or [])] +
+                [(file, "combined", "notes")    for file in (st.session_state.get("double_up_2") or [])]
+            )
+
+        # 병렬 업로드 (single/combined 모두 동일하게 처리)
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(upload_file, file, mode, doc_type) for file, mode, doc_type in files_to_upload]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"⚠️ 업로드 실패: {e}")
+
+        # DB에 저장할 랭킹 정보 저장
         payload = {
             "highlighter_ranking": convert_rank_to_json(st.session_state.up_hl_ranks),
             "pen_ranking": convert_rank_to_json(st.session_state.up_pen_ranks)
