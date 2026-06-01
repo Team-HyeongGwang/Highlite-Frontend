@@ -43,12 +43,13 @@ def show_library_screen():
         for attempt in doc.get("attempts", []):
             score = attempt.get("score")
             attempts.append({
-                "id": str(attempt["quiz_result_id"]),
+                "id": str(attempt["quiz_result_id"]) if attempt.get("quiz_result_id") else str(attempt["quiz_group_id"]),
                 "round": attempt["round"],
                 "q_num": attempt["q_num"],
                 "score": f"{score}%" if score is not None else "-",
                 "date": attempt["created_at"][:16].replace("T", " "),
-                "quiz_result_id": attempt["quiz_result_id"],
+                "quiz_result_id": attempt.get("quiz_result_id"),      # ← 채점 기록 ID
+                "quiz_group_id": attempt.get("quiz_group_id"),        # ← 문제 묶음 ID
             })
         grouped_files.append({
             "id": str(doc["document_id"]),
@@ -121,7 +122,7 @@ def show_library_screen():
             for attempt in file['attempts']:
                 st.session_state[f"chk_{file['id']}_{attempt['id']}"] = is_checked
 
-    col_check, col_space, col_del = st.columns([2, 7.5, 1.5])
+    col_check, col_del = st.columns([2, 1.5])
     with col_check: st.checkbox(f"**{selected_count}개 선택됨**", key="select_all", on_change=handle_select_all)
     with col_del:
         if st.button("삭제 ✕", use_container_width=True):
@@ -138,6 +139,9 @@ def show_library_screen():
             st.markdown(f"**📁 {file['title']}** 　<span style='color:#888; font-size:14px;'>(총 {file['total_count']}회 생성 · 업로드: {file['upload_date']})</span>", unsafe_allow_html=True)
 
         with col_regen:
+            # ──────────────────────────────────────────
+            # 문제 재생성 버튼 → 새 quiz_group_id로 새 회차 생성
+            # ──────────────────────────────────────────
             if st.button("🔄 문제 재생성", key=f"btn_regen_doc_{file['id']}", type="primary", use_container_width=True):
                 doc_id = str(file.get("document_id"))
                 group_id = st.session_state.get("group_id")
@@ -162,10 +166,12 @@ def show_library_screen():
                             if questions:
                                 st.session_state.questions = questions
                                 st.session_state.document_id = doc_id
+                                # ← 새 quiz_group_id 세션 저장
+                                st.session_state.quiz_group_id = str(result.get("quiz_group_id", ""))
                                 st.session_state.quiz_phase = "first_attempt"
                                 st.session_state.quiz_result = {}
                                 st.session_state.retry_counts = {}
-                                st.toast("재생성 완료! 문제 풀이 탭으로 이동하세요.", icon="🚀")
+                                st.session_state.current_page = "quiz"  # ← 문제 풀이로 이동
                                 st.rerun()
                             else:
                                 st.toast("생성된 문제가 없습니다.", icon="⚠️")
@@ -205,25 +211,54 @@ def show_library_screen():
                             st.markdown(f"<span style='color: {score_color}; font-weight: 800; line-height: 2.2;'>{attempt['score']}</span>", unsafe_allow_html=True)
 
                         with c_q:
+                            # ──────────────────────────────────────────
+                            # 문제 버튼 → quiz_group_id로 해당 회차 문제 불러오기
+                            # ──────────────────────────────────────────
                             if st.button("문제", key=f"btn_q_{attempt['id']}", use_container_width=True):
-                                st.session_state.document_id = str(file.get("document_id"))
-                                if attempt['score'] == "-":
-                                    st.session_state.quiz_phase = "first_attempt"
+                                quiz_group_id = attempt.get("quiz_group_id")
+                                if not quiz_group_id:
+                                    st.toast("문제 정보가 없습니다.", icon="⚠️")
                                 else:
-                                    st.session_state.quiz_phase = "review"
-                                st.session_state.current_page = "quiz"
-                                st.rerun()
+                                    try:
+                                        q_response = requests.get(
+                                            f"{BASE_URL}/question/questions-by-group",
+                                            params={"quiz_group_id": quiz_group_id},
+                                            timeout=30
+                                        )
+                                        if q_response.status_code == 200:
+                                            q_data = q_response.json()
+                                            st.session_state.questions = q_data["questions"]
+                                            st.session_state.quiz_group_id = quiz_group_id
+                                            st.session_state.document_id = str(file.get("document_id"))
+                                            st.session_state.quiz_result = {}
+                                            st.session_state.retry_counts = {}
+                                            if attempt['score'] == "-":
+                                                st.session_state.quiz_phase = "first_attempt"
+                                            else:
+                                                st.session_state.quiz_phase = "review"
+                                            st.session_state.current_page = "quiz"
+                                            st.rerun()
+                                        else:
+                                            st.toast("문제를 불러오지 못했습니다.", icon="❌")
+                                    except Exception as e:
+                                        st.toast(f"서버 연결 오류: {e}", icon="❌")
 
                         with c_w:
+                            # ──────────────────────────────────────────
+                            # 오답 버튼 → quiz_result_id로 오답 화면 이동
+                            # ──────────────────────────────────────────
                             if st.button("오답", key=f"btn_w_{attempt['id']}", use_container_width=True):
                                 if attempt['score'] == "-":
                                     st.toast("아직 문제를 푼 기록이 없습니다.")
                                 elif attempt['score'] == "100%":
                                     st.toast("틀린 문제가 없습니다.")
                                 else:
-                                    st.session_state.selected_review_id = attempt['id']
-                                    st.session_state.current_page = "review"
-                                    st.rerun()
+                                    if attempt.get("quiz_result_id"):
+                                        st.session_state.selected_quiz_result_id = attempt["quiz_result_id"]
+                                        st.session_state.current_page = "review"
+                                        st.rerun()
+                                    else:
+                                        st.toast("채점 기록이 없습니다.", icon="⚠️")
 
                     st.markdown("<div style='margin-bottom: 5px;'></div>", unsafe_allow_html=True)
 
