@@ -354,6 +354,7 @@ def show_quiz_screen():
                     json={
                         "user_id": user_id,
                         "document_id": str(document_id),
+                        "quiz_group_id": str(st.session_state.get("quiz_group_id", "")),
                         "attempt_phase": "first_attempt",
                         "answers": answers
                     }

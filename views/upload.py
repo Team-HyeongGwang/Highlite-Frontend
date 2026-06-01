@@ -1,6 +1,8 @@
 import streamlit as st
+import uuid
 import requests
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 BASE_URL = "http://127.0.0.1:8000"
 
@@ -136,6 +138,43 @@ def show_upload_screen():
             st.error("로그인이 필요합니다.")
             return
         
+    
+        group_id = str(uuid.uuid4())
+
+        # 업로드 함수 정의
+        def upload_file(file, mode, doc_type):
+            return requests.post(
+                "http://localhost:8000/retrieval/upload-pdf",
+                files={"file": (file.name, file.read(), "application/pdf")},
+                data={
+                    "user_id": USER_ID,
+                    "group_id": group_id,
+                    "doc_type": json.dumps({"mode": mode, "type": doc_type})
+                }
+            )
+
+        # 업로드할 파일 목록 구성
+        if upload_type == "교재에 직접 필기":
+            files_to_upload = [
+                (file, "single", None) 
+                for file in (st.session_state.get("single_up") or [])
+            ]
+        else:
+            files_to_upload = (
+                [(file, "combined", "textbook") for file in (st.session_state.get("double_up_1") or [])] +
+                [(file, "combined", "notes")    for file in (st.session_state.get("double_up_2") or [])]
+            )
+
+        # 병렬 업로드 (single/combined 모두 동일하게 처리)
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(upload_file, file, mode, doc_type) for file, mode, doc_type in files_to_upload]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"⚠️ 업로드 실패: {e}")
+
+        # DB에 저장할 랭킹 정보 저장
         payload = {
             "highlighter_ranking": convert_rank_to_json(st.session_state.up_hl_ranks),
             "pen_ranking": convert_rank_to_json(st.session_state.up_pen_ranks)
@@ -155,18 +194,19 @@ def show_upload_screen():
         except Exception as e:
             print(f"⚠️ 백엔드 통신 오류: {e}")
 
-        # 문제 생성 API 호출
+# 문제 생성 API 호출
         with st.status("AI 1타 강사가 문서를 분석하고 있습니다...", expanded=True) as status:
             st.write("🔍 PDF 텍스트 및 중요도 색상(형광펜/필기펜) 추출 중...")
             time.sleep(0.5)
             st.write("🧠 AI 모델이 핵심 개념을 바탕으로 문제 출제 중...")
 
             try:
-                group_id = st.session_state.get("group_id")
+                # group_id는 위에서 생성한 uuid 값 그대로 사용
+                # document_id는 업로드 후 RAG Agent가 세션에 저장한 값 사용
                 document_id = st.session_state.get("document_id")
-                
+
                 if not group_id:
-                    status.update(label="생성 실패", state="error", expanded=False)
+                    status.update(label="생성 실패", state="error", expanded=True)
                     st.error("문서 정보가 없습니다. PDF를 먼저 업로드해주세요.")
                     st.stop()
 
@@ -186,7 +226,9 @@ def show_upload_screen():
                     if questions:
                         st.session_state.questions = questions
                         st.session_state.user_id = user_id
-                        st.session_state.document_id = document_id
+                        st.session_state.document_id = str(result.get("document_id", ""))
+                        st.session_state.quiz_group_id = str(result.get("quiz_group_id", ""))
+                        st.session_state.group_id = group_id
                         st.session_state.quiz_phase = "first_attempt"
                         st.session_state.quiz_result = {}
                         st.session_state.retry_counts = {}
