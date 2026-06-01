@@ -278,7 +278,7 @@ def show_quiz_screen():
         horizontal=True,
         label_visibility="collapsed"
     )
-    st.write("")
+    st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True) # 구분선 추가
 
     # 필터 적용
     filter_map = {"전체": None, "핵심": "R", "중요": "O", "참고": "Y"}

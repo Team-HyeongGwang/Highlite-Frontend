@@ -118,14 +118,15 @@ def show_library_screen():
             for attempt in file['attempts']:
                 st.session_state[f"chk_{file['id']}_{attempt['id']}"] = is_checked
 
-    col_check, col_del = st.columns([2, 1.5])
+    col_check, col_space, col_del = st.columns([2, 7.5, 1.5])
     with col_check: st.checkbox(f"**{selected_count}개 선택됨**", key="select_all", on_change=handle_select_all)
+    with col_space: pass
     with col_del:
         if st.button("삭제 ✕", use_container_width=True):
             if selected_count > 0: delete_confirm_dialog(selected_count)
             else: st.toast("삭제할 회차를 먼저 선택해주세요!", icon="⚠️")
 
-    st.markdown('<div class="card" style="padding: 10px 24px;">', unsafe_allow_html=True)
+    st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
 
     for file in grouped_files:
         col_folder_title, col_regen = st.columns([8, 2])
@@ -172,7 +173,7 @@ def show_library_screen():
                     except Exception as e:
                         st.toast(f"서버 연결 오류: {e}", icon="❌")
 
-        with st.expander("생성된 문제 목록"):
+        with st.expander("생성된 문제 목록", expanded=True):
             inner_cols = st.columns([0.5, 2, 2.5, 2, 3])
             with inner_cols[0]: st.write("")
             with inner_cols[1]: st.markdown("<span style='color:#888; font-size:13px;'>회차</span>", unsafe_allow_html=True)
@@ -265,5 +266,3 @@ def show_library_screen():
                     st.markdown("<div style='margin-bottom: 5px;'></div>", unsafe_allow_html=True)
 
         st.write("")
-
-    st.markdown('</div>', unsafe_allow_html=True)

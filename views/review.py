@@ -193,7 +193,7 @@ def show_review_screen():
                             st.info(f"✅ **정답:** &nbsp; {q['correct']}")
                         
                         st.write("")
-                        with st.expander("해설 보기 ▾", expanded=True):
+                        with st.expander("해설 보기", expanded=True):
                             st.write(q['exp'])
 
             if not is_graded:
@@ -370,7 +370,7 @@ def show_review_screen():
                 if selected_count > 0: delete_review_dialog(selected_count)
                 else: st.toast("삭제할 오답 기록을 먼저 선택해주세요!", icon="⚠️")
 
-        st.markdown('<div class="card" style="padding: 10px 24px;">', unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
         
         for file in filtered_reviews:
             with st.expander(f"📁 **{file['title']}**  (총 {file['total_count']}회 응시 기록)"):
@@ -414,11 +414,10 @@ def show_review_screen():
                         
                     st.markdown("<div style='margin-bottom: 5px;'></div>", unsafe_allow_html=True)
                     
-        st.markdown('</div>', unsafe_allow_html=True)
-        
+        st.markdown('<hr style="margin: 20px 0;">', unsafe_allow_html=True)
+
     else:
         st.write("")
         st.markdown("<h1 style='font-size: 48px; margin-bottom: 10px;'>📂</h1>", unsafe_allow_html=True)
         st.markdown("<h4 style='color: var(--text-color); margin-bottom: 10px;'>아직 보관된 오답 노트가 없어요</h4>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 15px;'>문제를 풀고 채점하면 틀린 문제들이 이곳에 차곡차곡 쌓입니다!</p>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
