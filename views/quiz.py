@@ -82,7 +82,7 @@ def show_feedback_dialog(q_id, q):
 
         try:
             response = requests.post(
-                f"{BASE_URL}/question/regenerate",
+                f"{BASE_URL}/question/regenerate-from-feedback",
                 json={
                     "question_id": q["question_id"],
                     "importance_id": 1,
