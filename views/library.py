@@ -3,10 +3,6 @@ import requests
 
 BASE_URL = "http://127.0.0.1:8000"
 
-# 더미 group_id, document_id (RAG 연동 후 세션값으로 교체)
-DEFAULT_GROUP_ID = "11f49711-ee36-4c97-abc4-4691629a1f82"
-DEFAULT_DOCUMENT_ID = "2edcce3c-c4b8-4f22-ab44-8234bb41fe95"
-
 def show_library_screen():
     col_title, col_search = st.columns([5.5, 2])
     with col_title:
@@ -17,13 +13,16 @@ def show_library_screen():
     st.write("")
 
     # ──────────────────────────────────────────
-    # API에서 문서 목록 가져오기
+    # 로그인된 user_id 가져오기
     # ──────────────────────────────────────────
     user_id = st.session_state.get("user_info", {}).get("user_id")
     if not user_id:
         st.warning("로그인이 필요합니다.")
         return
 
+    # ──────────────────────────────────────────
+    # API에서 문서 목록 가져오기
+    # ──────────────────────────────────────────
     try:
         response = requests.get(
             f"{BASE_URL}/question/list",
@@ -82,9 +81,6 @@ def show_library_screen():
 
     selected_count = len(selected_attempts)
 
-    # ──────────────────────────────────────────
-    # 삭제 확인 모달 (show_library_screen 안에 위치)
-    # ──────────────────────────────────────────
     @st.dialog("삭제하시겠습니까?")
     def delete_confirm_dialog(count):
         st.write(f"선택한 **{count}개**의 회차(기록)를 정말 삭제하시겠습니까?")
@@ -93,7 +89,6 @@ def show_library_screen():
         if c1.button("취소", use_container_width=True): st.rerun()
         if c2.button("확인", type="primary", use_container_width=True):
 
-            # quiz_result_id 수집 (API 데이터 기반)
             quiz_result_ids = []
             for f_id, a_id in selected_attempts:
                 for file in grouped_files:
@@ -120,7 +115,6 @@ def show_library_screen():
                 except Exception as e:
                     st.toast(f"서버 연결 오류: {e}", icon="❌")
 
-            # 더미 데이터 사용 중일 때는 세션에서 직접 삭제
             if 'grouped_files' in st.session_state:
                 for f_id, a_id in selected_attempts:
                     for file in st.session_state.grouped_files:
@@ -158,38 +152,44 @@ def show_library_screen():
             st.markdown(f"**📁 {file['title']}** 　<span style='color:#888; font-size:14px;'>(총 {file['total_count']}회 생성 · 업로드: {file['upload_date']})</span>", unsafe_allow_html=True)
 
         with col_regen:
+            # ──────────────────────────────────────────
+            # 문제 재생성 버튼 → 세션값 사용
+            # ──────────────────────────────────────────
             if st.button("🔄 문제 재생성", key=f"btn_regen_doc_{file['id']}", type="primary", use_container_width=True):
-                try:
-                    doc_id = str(file.get("document_id", st.session_state.get("document_id", DEFAULT_DOCUMENT_ID)))
-                    group_id = str(st.session_state.get("group_id", DEFAULT_GROUP_ID))
+                doc_id = str(file.get("document_id"))
+                group_id = st.session_state.get("group_id")
 
-                    regen_response = requests.post(
-                        f"{BASE_URL}/question/regenerate-from-wrong",
-                        json={
-                            "user_id": user_id,
-                            "document_id": doc_id,
-                            "group_id": group_id,
-                            "question_count": 10
-                        },
-                        timeout=300
-                    )
-                    if regen_response.status_code == 200:
-                        result = regen_response.json()
-                        questions = result.get("questions", [])
-                        if questions:
-                            st.session_state.questions = questions
-                            st.session_state.document_id = doc_id
-                            st.session_state.quiz_phase = "first_attempt"
-                            st.session_state.quiz_result = {}
-                            st.session_state.retry_counts = {}
-                            st.toast("재생성 완료! 문제 풀이 탭으로 이동하세요.", icon="🚀")
-                            st.rerun()
+                if not doc_id or not group_id:
+                    st.toast("문서 정보가 없습니다.", icon="⚠️")
+                else:
+                    try:
+                        regen_response = requests.post(
+                            f"{BASE_URL}/question/regenerate-from-wrong",
+                            json={
+                                "user_id": user_id,
+                                "document_id": doc_id,
+                                "group_id": str(group_id),
+                                "question_count": 10
+                            },
+                            timeout=300
+                        )
+                        if regen_response.status_code == 200:
+                            result = regen_response.json()
+                            questions = result.get("questions", [])
+                            if questions:
+                                st.session_state.questions = questions
+                                st.session_state.document_id = doc_id
+                                st.session_state.quiz_phase = "first_attempt"
+                                st.session_state.quiz_result = {}
+                                st.session_state.retry_counts = {}
+                                st.toast("재생성 완료! 문제 풀이 탭으로 이동하세요.", icon="🚀")
+                                st.rerun()
+                            else:
+                                st.toast("생성된 문제가 없습니다.", icon="⚠️")
                         else:
-                            st.toast("생성된 문제가 없습니다.", icon="⚠️")
-                    else:
-                        st.toast(f"재생성 실패 (status: {regen_response.status_code})", icon="❌")
-                except Exception as e:
-                    st.toast(f"서버 연결 오류: {e}", icon="❌")
+                            st.toast(f"재생성 실패 (status: {regen_response.status_code})", icon="❌")
+                    except Exception as e:
+                        st.toast(f"서버 연결 오류: {e}", icon="❌")
 
         with st.expander("생성된 문제 목록 ▾"):
             inner_cols = st.columns([0.5, 2, 2.5, 2, 3])
@@ -220,7 +220,8 @@ def show_library_screen():
 
                     with c_q:
                         if st.button("문제", key=f"btn_q_{attempt['id']}", use_container_width=True):
-                            st.session_state.document_id = str(file.get("document_id", DEFAULT_DOCUMENT_ID))
+                            # 세션에 document_id 저장
+                            st.session_state.document_id = str(file.get("document_id"))
                             if attempt['score'] == "-":
                                 st.session_state.quiz_phase = "first_attempt"
                             else:
