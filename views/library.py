@@ -21,7 +21,7 @@ def show_library_screen():
         return
 
     # ──────────────────────────────────────────
-    # API에서 문서 목록 가져오기
+    # API에서 문서 목록 가져오기 (항상 API 데이터만 사용)
     # ──────────────────────────────────────────
     try:
         response = requests.get(
@@ -36,32 +36,28 @@ def show_library_screen():
     except Exception:
         api_documents = []
 
-    if not api_documents:
-        if 'grouped_files' not in st.session_state:
-            st.session_state.grouped_files = []
-        grouped_files = st.session_state.grouped_files
-    else:
-        grouped_files = []
-        for doc in api_documents:
-            attempts = []
-            for attempt in doc.get("attempts", []):
-                score = attempt.get("score")
-                attempts.append({
-                    "id": str(attempt["quiz_result_id"]),
-                    "round": attempt["round"],
-                    "q_num": attempt["q_num"],
-                    "score": f"{score}%" if score is not None else "-",
-                    "date": attempt["created_at"][:16].replace("T", " "),
-                    "quiz_result_id": attempt["quiz_result_id"],
-                })
-            grouped_files.append({
-                "id": str(doc["document_id"]),
-                "document_id": doc["document_id"],
-                "title": doc["title"],
-                "upload_date": doc["upload_date"][:16].replace("T", " "),
-                "total_count": doc["total_count"],
-                "attempts": attempts,
+    # 세션 데이터 무시, API 데이터만 사용
+    grouped_files = []
+    for doc in api_documents:
+        attempts = []
+        for attempt in doc.get("attempts", []):
+            score = attempt.get("score")
+            attempts.append({
+                "id": str(attempt["quiz_result_id"]),
+                "round": attempt["round"],
+                "q_num": attempt["q_num"],
+                "score": f"{score}%" if score is not None else "-",
+                "date": attempt["created_at"][:16].replace("T", " "),
+                "quiz_result_id": attempt["quiz_result_id"],
             })
+        grouped_files.append({
+            "id": str(doc["document_id"]),
+            "document_id": doc["document_id"],
+            "title": doc["title"],
+            "upload_date": doc["upload_date"][:16].replace("T", " "),
+            "total_count": doc["total_count"],
+            "attempts": attempts,
+        })
 
     if len(grouped_files) == 0:
         st.write("")
@@ -115,16 +111,6 @@ def show_library_screen():
                 except Exception as e:
                     st.toast(f"서버 연결 오류: {e}", icon="❌")
 
-            if 'grouped_files' in st.session_state:
-                for f_id, a_id in selected_attempts:
-                    for file in st.session_state.grouped_files:
-                        if file['id'] == f_id:
-                            file['attempts'] = [a for a in file['attempts'] if a['id'] != a_id]
-                            file['total_count'] = len(file['attempts'])
-                st.session_state.grouped_files = [
-                    f for f in st.session_state.grouped_files if f['total_count'] > 0
-                ]
-
             st.session_state.select_all = False
             st.rerun()
 
@@ -152,9 +138,6 @@ def show_library_screen():
             st.markdown(f"**📁 {file['title']}** 　<span style='color:#888; font-size:14px;'>(총 {file['total_count']}회 생성 · 업로드: {file['upload_date']})</span>", unsafe_allow_html=True)
 
         with col_regen:
-            # ──────────────────────────────────────────
-            # 문제 재생성 버튼 → 세션값 사용
-            # ──────────────────────────────────────────
             if st.button("🔄 문제 재생성", key=f"btn_regen_doc_{file['id']}", type="primary", use_container_width=True):
                 doc_id = str(file.get("document_id"))
                 group_id = st.session_state.get("group_id")
@@ -191,7 +174,7 @@ def show_library_screen():
                     except Exception as e:
                         st.toast(f"서버 연결 오류: {e}", icon="❌")
 
-        with st.expander("생성된 문제 목록 ▾"):
+        with st.expander("생성된 문제 목록"):
             inner_cols = st.columns([0.5, 2, 2.5, 2, 3])
             with inner_cols[0]: st.write("")
             with inner_cols[1]: st.markdown("<span style='color:#888; font-size:13px;'>회차</span>", unsafe_allow_html=True)
@@ -201,46 +184,48 @@ def show_library_screen():
 
             st.markdown("<hr style='margin: 5px 0px 10px 0px;'>", unsafe_allow_html=True)
 
-            for attempt in file['attempts']:
-                row_cols = st.columns([0.5, 2, 2.5, 2, 3])
+            if not file['attempts']:
+                st.info("아직 풀이 기록이 없습니다.")
+            else:
+                for attempt in file['attempts']:
+                    row_cols = st.columns([0.5, 2, 2.5, 2, 3])
 
-                with row_cols[0]:
-                    st.checkbox("선택", key=f"chk_{file['id']}_{attempt['id']}", label_visibility="collapsed")
+                    with row_cols[0]:
+                        st.checkbox("선택", key=f"chk_{file['id']}_{attempt['id']}", label_visibility="collapsed")
 
-                with row_cols[1]: st.write(f"**{attempt['round']}회차**")
-                with row_cols[2]: st.write(attempt['date'])
-                with row_cols[3]: st.write(f"{attempt['q_num']}문항")
+                    with row_cols[1]: st.write(f"**{attempt['round']}회차**")
+                    with row_cols[2]: st.write(attempt['date'])
+                    with row_cols[3]: st.write(f"{attempt['q_num']}문항")
 
-                with row_cols[4]:
-                    score_color = "#FF4B4B" if attempt['score'] == "-" else "#1E8E3E"
-                    c_score, c_q, c_w = st.columns([1.5, 1.2, 1.2])
+                    with row_cols[4]:
+                        score_color = "#FF4B4B" if attempt['score'] == "-" else "#1E8E3E"
+                        c_score, c_q, c_w = st.columns([1.5, 1.2, 1.2])
 
-                    with c_score:
-                        st.markdown(f"<span style='color: {score_color}; font-weight: 800; line-height: 2.2;'>{attempt['score']}</span>", unsafe_allow_html=True)
+                        with c_score:
+                            st.markdown(f"<span style='color: {score_color}; font-weight: 800; line-height: 2.2;'>{attempt['score']}</span>", unsafe_allow_html=True)
 
-                    with c_q:
-                        if st.button("문제", key=f"btn_q_{attempt['id']}", use_container_width=True):
-                            # 세션에 document_id 저장
-                            st.session_state.document_id = str(file.get("document_id"))
-                            if attempt['score'] == "-":
-                                st.session_state.quiz_phase = "first_attempt"
-                            else:
-                                st.session_state.quiz_phase = "review"
-                            st.session_state.current_page = "quiz"
-                            st.rerun()
-
-                    with c_w:
-                        if st.button("오답", key=f"btn_w_{attempt['id']}", use_container_width=True):
-                            if attempt['score'] == "-":
-                                st.toast("아직 문제를 푼 기록이 없습니다.")
-                            elif attempt['score'] == "100%":
-                                st.toast("틀린 문제가 없습니다.")
-                            else:
-                                st.session_state.selected_review_id = attempt['id']
-                                st.session_state.current_page = "review"
+                        with c_q:
+                            if st.button("문제", key=f"btn_q_{attempt['id']}", use_container_width=True):
+                                st.session_state.document_id = str(file.get("document_id"))
+                                if attempt['score'] == "-":
+                                    st.session_state.quiz_phase = "first_attempt"
+                                else:
+                                    st.session_state.quiz_phase = "review"
+                                st.session_state.current_page = "quiz"
                                 st.rerun()
 
-                st.markdown("<div style='margin-bottom: 5px;'></div>", unsafe_allow_html=True)
+                        with c_w:
+                            if st.button("오답", key=f"btn_w_{attempt['id']}", use_container_width=True):
+                                if attempt['score'] == "-":
+                                    st.toast("아직 문제를 푼 기록이 없습니다.")
+                                elif attempt['score'] == "100%":
+                                    st.toast("틀린 문제가 없습니다.")
+                                else:
+                                    st.session_state.selected_review_id = attempt['id']
+                                    st.session_state.current_page = "review"
+                                    st.rerun()
+
+                    st.markdown("<div style='margin-bottom: 5px;'></div>", unsafe_allow_html=True)
 
         st.write("")
 

@@ -103,9 +103,8 @@ def show_feedback_dialog(q_id, q):
                         st.session_state.questions[i]["answer"] = new_q["answer"]
                         st.session_state.questions[i]["explanation"] = new_q["explanation"]
 
-                        q_idx = i
-                        if f"ans_{q_idx}" in st.session_state:
-                            del st.session_state[f"ans_{q_idx}"]
+                        if f"ans_{i}" in st.session_state:
+                            del st.session_state[f"ans_{i}"]
 
                         if "quiz_result" in st.session_state:
                             results = st.session_state.quiz_result.get("results", [])
@@ -174,13 +173,13 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
 # 메인 화면
 # ────────────────────────────────────────
 def show_quiz_screen():
-    # 로그인된 user_id를 세션에서 가져오기
+    # 로그인된 user_id 세션에서 가져오기
     user_id = st.session_state.get("user_info", {}).get("user_id")
     if not user_id:
         st.warning("로그인이 필요합니다.")
         return
 
-    # document_id를 세션에서 가져오기 (RAG 연동 후 자동으로 저장됨)
+    # document_id 세션에서 가져오기
     document_id = st.session_state.get("document_id")
     if not document_id:
         st.warning("문서 정보가 없습니다. 업로드 화면에서 문제를 먼저 생성해주세요.")
@@ -190,6 +189,7 @@ def show_quiz_screen():
         st.warning("생성된 문제가 없습니다. 업로드 화면에서 문제를 먼저 생성해주세요.")
         return
 
+    # 백엔드 응답 → 프론트 형식 변환
     questions = [
         convert_question(q, idx)
         for idx, q in enumerate(st.session_state.questions)
@@ -239,57 +239,74 @@ def show_quiz_screen():
                         del st.session_state[key]
                 st.session_state.quiz_phase = "retake"
                 st.rerun()
-                
-    filter_choice = st.radio("필터", ["전체", "핵심", "중요", "참고"], horizontal=True, label_visibility="collapsed")
-    st.write("") 
-    
+
+    # ────────────────────────────────────────
+    # 필터 (핵심/중요/참고 → R/O/Y 매핑)
+    # ────────────────────────────────────────
+    filter_choice = st.radio(
+        "필터",
+        ["전체", "핵심", "중요", "참고"],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+    st.write("")
+
+    # 필터 적용
+    filter_map = {"전체": None, "핵심": "R", "중요": "O", "참고": "Y"}
+    filter_imp = filter_map[filter_choice]
+    filtered_questions = questions if not filter_imp else [q for q in questions if q['imp'] == filter_imp]
+
     if st.session_state.quiz_phase == "review":
         st.success(f"총 {num_q}문제 중 **{correct_count}문제**를 맞혔습니다. (정답률 {score_percent}%)")
         st.write("")
 
-    filtered_questions = []
-    if filter_choice == "전체":
-        filtered_questions = mock_questions
-    elif filter_choice == "핵심":
-        filtered_questions = [q for q in mock_questions if q['imp'] == "핵심"]
-    elif filter_choice == "중요":
-        filtered_questions = [q for q in mock_questions if q['imp'] == "중요"]
-    elif filter_choice == "참고":
-        filtered_questions = [q for q in mock_questions if q['imp'] == "참고"]
-
-    # 만약 필터링 결과 문제가 하나도 없다면 안내 메시지 표시
     if len(filtered_questions) == 0:
         st.info("해당 조건에 맞는 문제가 없습니다.")
 
-    # ----------------------------------------------------
-    # 2. 문제 렌더링 루프 
-    # ----------------------------------------------------
-    for idx, q in enumerate(filtered_questions): 
-        # 주의: session_state 키가 꼬이지 않도록 원본 리스트(mock_questions)에서의 
-        # 진짜 인덱스를 찾아야 채점 및 입력값이 유지됩니다.
-        real_idx = mock_questions.index(q) 
-        
+    # ────────────────────────────────────────
+    # 문제 렌더링
+    # ────────────────────────────────────────
+    for q in filtered_questions:
+        # 원본 questions 리스트에서의 실제 인덱스 (세션 키 일관성 유지)
+        real_idx = questions.index(q)
+
         with st.container(border=True):
             is_graded = (st.session_state.quiz_phase == "review")
-            my_ans = st.session_state.get(f"ans_{real_idx}", "") # real_idx 사용
-            is_correct = (str(my_ans).strip() == q['correct']) if is_graded else False
-            
+            my_ans = st.session_state.get(f"ans_{real_idx}", "")
+
+            # 백엔드 채점 결과 기반 is_correct
+            if is_graded:
+                quiz_result = st.session_state.get("quiz_result", {})
+                results = {r["question_id"]: r for r in quiz_result.get("results", [])}
+                result = results.get(q["question_id"], {})
+                is_correct = result.get("is_correct", False)
+            else:
+                is_correct = False
+
             mark = ""
             if is_graded:
                 mark = "<span style='color: #28A745; font-size: 17px;'>⭕</span> " if is_correct else "<span style='color: #FF4B4B; font-size: 17px;'>❌</span> "
 
             c1, c2 = st.columns([7, 3])
             with c1:
-                imp_map = {"핵심": "r", "중요": "o", "참고": "y"}
-                imp_class = f"tag-{imp_map.get(q['imp'], 'r')}" 
-                
-                st.markdown(f"**{mark}{q['id']}** &nbsp; <span class='{imp_class}'>{q['imp']}</span> &nbsp; <span class='tag-type'>{q['type']}</span>", unsafe_allow_html=True)
-            with c2: 
-                st.markdown(f"<div style='text-align: right; color: #888; font-size: 13px;'>{q['source']}</div>", unsafe_allow_html=True)
-            
-            st.markdown(f"<div style='margin-top: 15px; margin-bottom: 15px; font-size: 16px; color: var(--text-color);'>{q['text']}</div>", unsafe_allow_html=True)
-            
-            # render_question_input에도 real_idx를 넘겨줌
+                imp_map = {"R": "r", "O": "o", "Y": "y"}
+                imp_label = {"R": "핵심", "O": "중요", "Y": "참고"}
+                imp_class = f"tag-{imp_map.get(q['imp'], 'y')}"
+                st.markdown(
+                    f"**{mark}{q['id']}** &nbsp; <span class='{imp_class}'>{imp_label.get(q['imp'], q['imp'])}</span> &nbsp; <span class='tag-type'>{q['type']}</span>",
+                    unsafe_allow_html=True
+                )
+            with c2:
+                st.markdown(
+                    f"<div style='text-align: right; color: #888; font-size: 13px;'>{q['source']}</div>",
+                    unsafe_allow_html=True
+                )
+
+            st.markdown(
+                f"<div style='margin-top: 15px; margin-bottom: 15px; font-size: 16px; color: var(--text-color);'>{q['text']}</div>",
+                unsafe_allow_html=True
+            )
+
             render_question_input(q, real_idx, prefix="ans", is_disabled=is_graded)
             st.write("")
 
