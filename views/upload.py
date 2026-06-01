@@ -128,7 +128,11 @@ def show_upload_screen():
     if st.button("문제 생성", type="primary", use_container_width=True, key="btn_gen_quiz"):
 
         # 랭킹 정보 DB 저장
-        user_id = st.session_state.get("user_id", 1)
+        user_id = st.session_state.get("user_info", {}).get("user_id")
+        if not user_id:
+            st.error("로그인이 필요합니다.")
+            return
+        
         payload = {
             "highlighter_ranking": convert_rank_to_json(st.session_state.up_hl_ranks),
             "pen_ranking": convert_rank_to_json(st.session_state.up_pen_ranks)
@@ -157,17 +161,11 @@ def show_upload_screen():
             try:
                 group_id = st.session_state.get("group_id")
                 document_id = st.session_state.get("document_id")
-
-                # RAG 연동 전 임시 더미값 사용 (연동 완료 후 아래 두 줄 삭제)
-                group_id = st.session_state.get("group_id", "11f49711-ee36-4c97-abc4-4691629a1f82")
-                document_id = st.session_state.get("document_id", "2edcce3c-c4b8-4f22-ab44-8234bb41fe95")
-                st.session_state.document_id = document_id  # 문자열 uuid로 저장
-
-                # RAG 연동 완료 후 아래 주석 해제
-                # if not group_id:
-                #     status.update(label="생성 실패", state="error", expanded=False)
-                #     st.error("문서 정보가 없습니다. PDF를 먼저 업로드해주세요.")
-                #     st.stop()
+                
+                if not group_id:
+                    status.update(label="생성 실패", state="error", expanded=False)
+                    st.error("문서 정보가 없습니다. PDF를 먼저 업로드해주세요.")
+                    st.stop()
 
                 response = requests.post(
                     f"{BASE_URL}/question/generate",

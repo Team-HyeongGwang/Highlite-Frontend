@@ -19,7 +19,10 @@ def show_library_screen():
     # ──────────────────────────────────────────
     # API에서 문서 목록 가져오기
     # ──────────────────────────────────────────
-    user_id = st.session_state.get("user_id", 10)
+    user_id = st.session_state.get("user_info", {}).get("user_id")
+    if not user_id:
+        st.warning("로그인이 필요합니다.")
+        return
 
     try:
         response = requests.get(
@@ -34,12 +37,9 @@ def show_library_screen():
     except Exception:
         api_documents = []
 
-    # API 호출 성공하면 더미 데이터 사용 안 함
-    use_api = True
     if not api_documents:
-        use_api = False
         if 'grouped_files' not in st.session_state:
-            st.session_state.grouped_files = []  # ← 더미 데이터 제거
+            st.session_state.grouped_files = []
         grouped_files = st.session_state.grouped_files
     else:
         grouped_files = []
@@ -82,6 +82,9 @@ def show_library_screen():
 
     selected_count = len(selected_attempts)
 
+    # ──────────────────────────────────────────
+    # 삭제 확인 모달 (show_library_screen 안에 위치)
+    # ──────────────────────────────────────────
     @st.dialog("삭제하시겠습니까?")
     def delete_confirm_dialog(count):
         st.write(f"선택한 **{count}개**의 회차(기록)를 정말 삭제하시겠습니까?")
@@ -89,12 +92,45 @@ def show_library_screen():
         c1, c2 = st.columns(2)
         if c1.button("취소", use_container_width=True): st.rerun()
         if c2.button("확인", type="primary", use_container_width=True):
+
+            # quiz_result_id 수집 (API 데이터 기반)
+            quiz_result_ids = []
             for f_id, a_id in selected_attempts:
-                for file in st.session_state.grouped_files:
+                for file in grouped_files:
                     if file['id'] == f_id:
-                        file['attempts'] = [a for a in file['attempts'] if a['id'] != a_id]
-                        file['total_count'] = len(file['attempts'])
-            st.session_state.grouped_files = [f for f in st.session_state.grouped_files if f['total_count'] > 0]
+                        for attempt in file['attempts']:
+                            if attempt['id'] == a_id:
+                                if attempt.get('quiz_result_id'):
+                                    quiz_result_ids.append(int(attempt['quiz_result_id']))
+
+            if quiz_result_ids:
+                try:
+                    del_response = requests.delete(
+                        f"{BASE_URL}/question/quiz-result",
+                        json={
+                            "user_id": user_id,
+                            "quiz_result_ids": quiz_result_ids
+                        },
+                        timeout=30
+                    )
+                    if del_response.status_code == 200:
+                        st.toast("삭제되었습니다.", icon="✅")
+                    else:
+                        st.toast(f"삭제 실패 (status: {del_response.status_code})", icon="❌")
+                except Exception as e:
+                    st.toast(f"서버 연결 오류: {e}", icon="❌")
+
+            # 더미 데이터 사용 중일 때는 세션에서 직접 삭제
+            if 'grouped_files' in st.session_state:
+                for f_id, a_id in selected_attempts:
+                    for file in st.session_state.grouped_files:
+                        if file['id'] == f_id:
+                            file['attempts'] = [a for a in file['attempts'] if a['id'] != a_id]
+                            file['total_count'] = len(file['attempts'])
+                st.session_state.grouped_files = [
+                    f for f in st.session_state.grouped_files if f['total_count'] > 0
+                ]
+
             st.session_state.select_all = False
             st.rerun()
 
@@ -122,9 +158,6 @@ def show_library_screen():
             st.markdown(f"**📁 {file['title']}** 　<span style='color:#888; font-size:14px;'>(총 {file['total_count']}회 생성 · 업로드: {file['upload_date']})</span>", unsafe_allow_html=True)
 
         with col_regen:
-            # ──────────────────────────────────────────
-            # 4. 문제 재생성 버튼 → API 연동
-            # ──────────────────────────────────────────
             if st.button("🔄 문제 재생성", key=f"btn_regen_doc_{file['id']}", type="primary", use_container_width=True):
                 try:
                     doc_id = str(file.get("document_id", st.session_state.get("document_id", DEFAULT_DOCUMENT_ID)))
@@ -186,11 +219,7 @@ def show_library_screen():
                         st.markdown(f"<span style='color: {score_color}; font-weight: 800; line-height: 2.2;'>{attempt['score']}</span>", unsafe_allow_html=True)
 
                     with c_q:
-                        # ──────────────────────────────────────────
-                        # 2. 문제 버튼 → 문제 풀이 화면으로 이동
-                        # ──────────────────────────────────────────
                         if st.button("문제", key=f"btn_q_{attempt['id']}", use_container_width=True):
-                            # 해당 회차 문제 세션에 저장
                             st.session_state.document_id = str(file.get("document_id", DEFAULT_DOCUMENT_ID))
                             if attempt['score'] == "-":
                                 st.session_state.quiz_phase = "first_attempt"
@@ -200,9 +229,6 @@ def show_library_screen():
                             st.rerun()
 
                     with c_w:
-                        # ──────────────────────────────────────────
-                        # 3. 오답 버튼 → 오답 화면으로 이동
-                        # ──────────────────────────────────────────
                         if st.button("오답", key=f"btn_w_{attempt['id']}", use_container_width=True):
                             if attempt['score'] == "-":
                                 st.toast("아직 문제를 푼 기록이 없습니다.")

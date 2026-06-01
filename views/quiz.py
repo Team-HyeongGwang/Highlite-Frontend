@@ -102,27 +102,24 @@ def show_feedback_dialog(q_id, q):
                         st.session_state.questions[i]["options"] = new_q.get("options")
                         st.session_state.questions[i]["answer"] = new_q["answer"]
                         st.session_state.questions[i]["explanation"] = new_q["explanation"]
-                        
-                        # 해당 문제 인덱스 찾아서 답안 초기화
+
                         q_idx = i
                         if f"ans_{q_idx}" in st.session_state:
                             del st.session_state[f"ans_{q_idx}"]
-                        
-                        # 채점 결과에서도 해당 문제 제거
+
                         if "quiz_result" in st.session_state:
                             results = st.session_state.quiz_result.get("results", [])
                             st.session_state.quiz_result["results"] = [
                                 r for r in results if r["question_id"] != q["question_id"]
                             ]
                         break
-                
-                # quiz_phase를 first_attempt로 되돌리기
+
                 st.session_state.quiz_phase = "first_attempt"
                 st.session_state.retry_counts[q_id] = retry_count + 1
                 st.success(f"{q_id} 문항이 재생성되었습니다! 다시 풀어보세요 ✅")
                 time.sleep(1.5)
                 st.rerun()
-                
+
             elif response.status_code == 400:
                 st.toast("재생성은 최대 3회까지만 가능합니다.", icon="⚠️")
             else:
@@ -177,6 +174,18 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
 # 메인 화면
 # ────────────────────────────────────────
 def show_quiz_screen():
+    # 로그인된 user_id를 세션에서 가져오기
+    user_id = st.session_state.get("user_info", {}).get("user_id")
+    if not user_id:
+        st.warning("로그인이 필요합니다.")
+        return
+
+    # document_id를 세션에서 가져오기 (RAG 연동 후 자동으로 저장됨)
+    document_id = st.session_state.get("document_id")
+    if not document_id:
+        st.warning("문서 정보가 없습니다. 업로드 화면에서 문제를 먼저 생성해주세요.")
+        return
+
     if "questions" not in st.session_state or not st.session_state.questions:
         st.warning("생성된 문제가 없습니다. 업로드 화면에서 문제를 먼저 생성해주세요.")
         return
@@ -246,7 +255,6 @@ def show_quiz_screen():
             is_graded = (st.session_state.quiz_phase == "review")
             my_ans = st.session_state.get(f"ans_{idx}", "")
 
-            # 백엔드 채점 결과 기반 is_correct
             if is_graded:
                 quiz_result = st.session_state.get("quiz_result", {})
                 results = {r["question_id"]: r for r in quiz_result.get("results", [])}
@@ -322,8 +330,8 @@ def show_quiz_screen():
                 response = requests.post(
                     f"{BASE_URL}/question/submit",
                     json={
-                        "user_id": str(st.session_state.get("user_id", 1)),
-                        "document_id": str(st.session_state.get("document_id", "2edcce3c-c4b8-4f22-ab44-8234bb41fe95")),
+                        "user_id": user_id,
+                        "document_id": str(document_id),
                         "attempt_phase": "first_attempt",
                         "answers": answers
                     }
@@ -356,8 +364,8 @@ def show_quiz_screen():
                 response = requests.post(
                     f"{BASE_URL}/question/submit",
                     json={
-                        "user_id": st.session_state.get("user_id", 1),
-                        "document_id": st.session_state.get("document_id", "2edcce3c-c4b8-4f22-ab44-8234bb41fe95"),
+                        "user_id": user_id,
+                        "document_id": str(document_id),
                         "attempt_phase": "regenerated",
                         "answers": answers
                     }
