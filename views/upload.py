@@ -193,23 +193,23 @@ def show_upload_screen():
 
                         st.write("✨ 해설 작성 및 최종 검수 중...")
                         time.sleep(0.5)
-                        status.update(label="문제 생성 완료!", state="complete", expanded=False)
+                        status.update(label="문제 생성 완료!", state="complete", expanded=True)
                         st.success(f"총 {len(questions)}문제가 성공적으로 생성되었습니다! 사이드바의 '문제 풀이'로 이동하세요.")
                         st.balloons()
                     else:
-                        status.update(label="생성 실패", state="error", expanded=False)
+                        status.update(label="생성 실패", state="error", expanded=True)
                         st.error("문제가 생성되지 않았습니다. DB에 데이터가 있는지 확인해주세요.")
 
                 elif response.status_code == 404:
-                    status.update(label="생성 실패", state="error", expanded=False)
+                    status.update(label="생성 실패", state="error", expanded=True)
                     st.error("해당 문서의 중요도 분석 결과가 없습니다. PDF를 먼저 업로드해주세요.")
                 else:
-                    status.update(label="생성 실패", state="error", expanded=False)
+                    status.update(label="생성 실패", state="error", expanded=True)
                     st.error(f"오류가 발생했습니다. (status: {response.status_code})")
 
             except requests.exceptions.Timeout:
-                status.update(label="시간 초과", state="error", expanded=False)
+                status.update(label="시간 초과", state="error", expanded=True)
                 st.error("문제 생성 시간이 초과되었습니다. 다시 시도해주세요.")
             except Exception as e:
-                status.update(label="연결 오류", state="error", expanded=False)
+                status.update(label="연결 오류", state="error", expanded=True)
                 st.error(f"서버 연결 오류: {e}")
