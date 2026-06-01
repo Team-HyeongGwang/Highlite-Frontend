@@ -194,7 +194,20 @@ def show_quiz_screen():
         convert_question(q, idx)
         for idx, q in enumerate(st.session_state.questions)
     ]
-
+    
+    # ← 추가: review 모드일 때 quiz_result에서 답안 세션에 채우기
+    if st.session_state.quiz_phase == "review":
+        quiz_result = st.session_state.get("quiz_result", {})
+        results = {r["question_id"]: r for r in quiz_result.get("results", [])}
+        for idx, q in enumerate(questions):
+            ans_key = f"ans_{idx}"
+            if ans_key not in st.session_state or not st.session_state.get(ans_key):
+                result = results.get(q["question_id"], {})
+                submitted = result.get("submitted_answer", "")
+                if submitted:
+                    st.session_state[ans_key] = submitted
+    
+    
     if 'quiz_phase' not in st.session_state:
         st.session_state.quiz_phase = "first_attempt"
     if 'retry_counts' not in st.session_state:

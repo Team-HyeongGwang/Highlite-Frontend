@@ -12,17 +12,11 @@ def show_library_screen():
 
     st.write("")
 
-    # ──────────────────────────────────────────
-    # 로그인된 user_id 가져오기
-    # ──────────────────────────────────────────
     user_id = st.session_state.get("user_info", {}).get("user_id")
     if not user_id:
         st.warning("로그인이 필요합니다.")
         return
 
-    # ──────────────────────────────────────────
-    # API에서 문서 목록 가져오기 (항상 API 데이터만 사용)
-    # ──────────────────────────────────────────
     try:
         response = requests.get(
             f"{BASE_URL}/question/list",
@@ -36,7 +30,6 @@ def show_library_screen():
     except Exception:
         api_documents = []
 
-    # 세션 데이터 무시, API 데이터만 사용
     grouped_files = []
     for doc in api_documents:
         attempts = []
@@ -48,8 +41,8 @@ def show_library_screen():
                 "q_num": attempt["q_num"],
                 "score": f"{score}%" if score is not None else "-",
                 "date": attempt["created_at"][:16].replace("T", " "),
-                "quiz_result_id": attempt.get("quiz_result_id"),      # ← 채점 기록 ID
-                "quiz_group_id": attempt.get("quiz_group_id"),        # ← 문제 묶음 ID
+                "quiz_result_id": attempt.get("quiz_result_id"),
+                "quiz_group_id": attempt.get("quiz_group_id"),
             })
         grouped_files.append({
             "id": str(doc["document_id"]),
@@ -67,9 +60,6 @@ def show_library_screen():
         st.markdown("<p style='color: #888; font-size: 15px;'>왼쪽 메뉴의 <b style='color: #FF4B4B;'>[업로드]</b> 탭으로 이동해서<br>첫 번째 교재를 올리고 나만의 문제를 만들어보세요!</p>", unsafe_allow_html=True)
         return
 
-    # ──────────────────────────────────────────
-    # 선택 및 삭제
-    # ──────────────────────────────────────────
     selected_attempts = []
     for file in grouped_files:
         for attempt in file['attempts']:
@@ -85,7 +75,6 @@ def show_library_screen():
         c1, c2 = st.columns(2)
         if c1.button("취소", use_container_width=True): st.rerun()
         if c2.button("확인", type="primary", use_container_width=True):
-
             quiz_result_ids = []
             for f_id, a_id in selected_attempts:
                 for file in grouped_files:
@@ -99,10 +88,7 @@ def show_library_screen():
                 try:
                     del_response = requests.delete(
                         f"{BASE_URL}/question/quiz-result",
-                        json={
-                            "user_id": user_id,
-                            "quiz_result_ids": quiz_result_ids
-                        },
+                        json={"user_id": user_id, "quiz_result_ids": quiz_result_ids},
                         timeout=30
                     )
                     if del_response.status_code == 200:
@@ -139,9 +125,6 @@ def show_library_screen():
             st.markdown(f"**📁 {file['title']}** 　<span style='color:#888; font-size:14px;'>(총 {file['total_count']}회 생성 · 업로드: {file['upload_date']})</span>", unsafe_allow_html=True)
 
         with col_regen:
-            # ──────────────────────────────────────────
-            # 문제 재생성 버튼 → 새 quiz_group_id로 새 회차 생성
-            # ──────────────────────────────────────────
             if st.button("🔄 문제 재생성", key=f"btn_regen_doc_{file['id']}", type="primary", use_container_width=True):
                 doc_id = str(file.get("document_id"))
                 group_id = st.session_state.get("group_id")
@@ -166,12 +149,11 @@ def show_library_screen():
                             if questions:
                                 st.session_state.questions = questions
                                 st.session_state.document_id = doc_id
-                                # ← 새 quiz_group_id 세션 저장
                                 st.session_state.quiz_group_id = str(result.get("quiz_group_id", ""))
                                 st.session_state.quiz_phase = "first_attempt"
                                 st.session_state.quiz_result = {}
                                 st.session_state.retry_counts = {}
-                                st.session_state.current_page = "quiz"  # ← 문제 풀이로 이동
+                                st.session_state.current_page = "quiz"
                                 st.rerun()
                             else:
                                 st.toast("생성된 문제가 없습니다.", icon="⚠️")
@@ -212,7 +194,7 @@ def show_library_screen():
 
                         with c_q:
                             # ──────────────────────────────────────────
-                            # 문제 버튼 → quiz_group_id로 해당 회차 문제 불러오기
+                            # 문제 버튼 → quiz_group_id로 해당 회차 문제 + 채점결과 불러오기
                             # ──────────────────────────────────────────
                             if st.button("문제", key=f"btn_q_{attempt['id']}", use_container_width=True):
                                 quiz_group_id = attempt.get("quiz_group_id")
@@ -230,12 +212,30 @@ def show_library_screen():
                                             st.session_state.questions = q_data["questions"]
                                             st.session_state.quiz_group_id = quiz_group_id
                                             st.session_state.document_id = str(file.get("document_id"))
-                                            st.session_state.quiz_result = {}
                                             st.session_state.retry_counts = {}
+
                                             if attempt['score'] == "-":
+                                                # 채점 기록 없음 → 새로 풀기
                                                 st.session_state.quiz_phase = "first_attempt"
+                                                st.session_state.quiz_result = {}
                                             else:
+                                                # 채점 기록 있음 → quiz_result 불러오기
                                                 st.session_state.quiz_phase = "review"
+                                                quiz_result_id = attempt.get("quiz_result_id")
+                                                if quiz_result_id:
+                                                    try:
+                                                        qr_response = requests.get(
+                                                            f"{BASE_URL}/question/quiz-result-detail",
+                                                            params={"quiz_result_id": quiz_result_id},
+                                                            timeout=30
+                                                        )
+                                                        if qr_response.status_code == 200:
+                                                            st.session_state.quiz_result = qr_response.json()
+                                                        else:
+                                                            st.session_state.quiz_result = {}
+                                                    except Exception:
+                                                        st.session_state.quiz_result = {}
+
                                             st.session_state.current_page = "quiz"
                                             st.rerun()
                                         else:
