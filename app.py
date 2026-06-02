@@ -235,6 +235,7 @@ else:
         if menu != st.session_state.current_menu:
             st.session_state.current_menu = menu
             st.session_state.show_mypage = False
+            st.session_state.current_page = None  # 메뉴 변경 시 current_page 초기화
         
         st.markdown("---")
         
@@ -311,8 +312,20 @@ else:
     if st.session_state.show_mypage:
         show_mypage_screen()
     else:
-        if menu == "업로드": show_upload_screen()
-        elif menu == "문서 라이브러리": show_library_screen()
-        elif menu == "문제 풀이": show_quiz_screen()
-        elif menu == "오답 노트": show_review_screen()
-        elif menu == "내보내기": show_export_screen()
+        # current_page 세션값으로 자동 이동
+        current_page = st.session_state.get("current_page")
+
+        if current_page == "quiz":
+            show_quiz_screen()
+        elif current_page == "review":
+            show_review_screen()
+        elif menu == "업로드":
+            show_upload_screen()
+        elif menu == "문서 라이브러리":
+            show_library_screen()
+        elif menu == "문제 풀이":
+            show_quiz_screen()
+        elif menu == "오답 노트":
+            show_review_screen()
+        elif menu == "내보내기":
+            show_export_screen()
