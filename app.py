@@ -170,7 +170,6 @@ else:
             h_c1.button("➕ 추가", key="dlg_add_hl", on_click=add_rank, args=('hl',), use_container_width=True)
             h_c2.button("➖ 삭제", key="dlg_rem_hl", on_click=remove_rank, args=('hl',), use_container_width=True)
             
-            # ⭐️ 형광펜이 비어있을 때 (Empty State UI 적용)
             if not st.session_state.hl_ranks:
                 st.markdown("""
                 <div class='empty-state-box'>
@@ -189,7 +188,6 @@ else:
             p_c1.button("➕ 추가", key="dlg_add_pen", on_click=add_rank, args=('pen',), use_container_width=True)
             p_c2.button("➖ 삭제", key="dlg_rem_pen", on_click=remove_rank, args=('pen',), use_container_width=True)
             
-            # ⭐️ 필기펜이 비어있을 때 (Empty State UI 적용)
             if not st.session_state.pen_ranks:
                 st.markdown("""
                 <div class='empty-state-box'>
