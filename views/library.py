@@ -258,6 +258,9 @@ def show_library_screen():
                                 else:
                                     if attempt.get("quiz_result_id"):
                                         st.session_state.selected_quiz_result_id = attempt["quiz_result_id"]
+                                        st.session_state.review_doc_title = file["title"]
+                                        st.session_state.review_doc_round = attempt["round"]
+                                        st.session_state.review_from = "library"  # ← 진입 경로 저장
                                         st.session_state.current_page = "review"
                                         st.rerun()
                                     else:

@@ -241,7 +241,16 @@ def show_review_screen():
                 for key in list(st.session_state.keys()):
                     if key.startswith("view_ans_"):
                         del st.session_state[key]
+
+                # ← 진입 경로에 따라 이동
+                if st.session_state.get("review_from") == "library":
+                    st.session_state.review_from = None
+                    st.session_state.current_page = None
+                    st.session_state.current_menu = "문서 라이브러리"
+                else:
+                    st.session_state.current_page = "review"  # 오답 노트 목록으로
                 st.rerun()
+        
         with btn_c2:
             all_resolved = len(resolved_set) >= len(wrong_answers)
             retry_label = "모두 해결 완료!" if all_resolved else "오답 다시 풀기 ↻"
