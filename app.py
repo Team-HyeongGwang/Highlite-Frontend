@@ -37,6 +37,18 @@ st.markdown("""
     .tag-o { background-color: #FF9F36; color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
     .tag-y { background-color: #FFC107; color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
     .tag-type { border: 1px solid #E9ECEF; padding: 2px 8px; border-radius: 4px; font-size: 12px; color: #666; }
+    .empty-state-box {
+        border: 2px dashed #E9ECEF;
+        border-radius: 10px;
+        padding: 24px 16px;
+        text-align: center;
+        background-color: #F8F9FA;
+        margin-top: 10px;
+        transition: all 0.2s ease-in-out;
+    }
+    .empty-state-icon { font-size: 26px; margin-bottom: 8px; opacity: 0.8; }
+    .empty-state-title { font-size: 15px; font-weight: 800; color: #495057; margin-bottom: 6px; letter-spacing: -0.5px; }
+    .empty-state-desc { font-size: 13px; color: #868E96; line-height: 1.4; word-break: keep-all; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -158,9 +170,15 @@ else:
             h_c1.button("➕ 추가", key="dlg_add_hl", on_click=add_rank, args=('hl',), use_container_width=True)
             h_c2.button("➖ 삭제", key="dlg_rem_hl", on_click=remove_rank, args=('hl',), use_container_width=True)
             
-            # 형광펜이 비어있을 때
+            # ⭐️ 형광펜이 비어있을 때 (Empty State UI 적용)
             if not st.session_state.hl_ranks:
-                st.info("순위 미지정\n\n형광펜 색상에 따른 추가 가중치가 부여되지 않습니다.")
+                st.markdown("""
+                <div class='empty-state-box'>
+                    <div class='empty-state-icon'>🖍️</div>
+                    <div class='empty-state-title'>순위 미지정</div>
+                    <div class='empty-state-desc'>형광펜 색상에 따른<br>추가 가중치가 부여되지 않습니다.</div>
+                </div>
+                """, unsafe_allow_html=True)
             else:
                 for i in range(len(st.session_state.hl_ranks)):
                     st.session_state.hl_ranks[i] = st.selectbox(f"형광펜 {i+1}순위", color_options, index=color_options.index(st.session_state.hl_ranks[i]), key=f"dlg_hl_{i}")
@@ -171,8 +189,15 @@ else:
             p_c1.button("➕ 추가", key="dlg_add_pen", on_click=add_rank, args=('pen',), use_container_width=True)
             p_c2.button("➖ 삭제", key="dlg_rem_pen", on_click=remove_rank, args=('pen',), use_container_width=True)
             
+            # ⭐️ 필기펜이 비어있을 때 (Empty State UI 적용)
             if not st.session_state.pen_ranks:
-                st.info("순위 미지정\n\n필기 내용은 가중치 점수 없이 텍스트 맥락 파악 용도로만 AI가 참고합니다.")
+                st.markdown("""
+                <div class='empty-state-box'>
+                    <div class='empty-state-icon'>🖍️</div>
+                    <div class='empty-state-title'>순위 미지정</div>
+                    <div class='empty-state-desc'>필기 내용은 가중치 없이<br>텍스트 맥락 파악에만 활용됩니다.</div>
+                </div>
+                """, unsafe_allow_html=True)
             else:
                 for i in range(len(st.session_state.pen_ranks)):
                     st.session_state.pen_ranks[i] = st.selectbox(f"필기펜 {i+1}순위", color_options, index=color_options.index(st.session_state.pen_ranks[i]), key=f"dlg_pen_{i}")

@@ -32,6 +32,37 @@ def show_upload_screen():
         .rank-badge { background-color: #F1F3F5; color: #495057; border: 1px solid #DEE2E6; width: 22px; height: 22px; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: 800; margin-right: 8px; }
         .rank-text { font-size: 14px; font-weight: 700; color: #343A40; }
         hr { margin: 30px 0 !important; border-color: rgba(151,151,151,0.2) !important; }
+        .empty-state-box {
+            border: 2px dashed #E9ECEF;
+            border-radius: 10px;
+            padding: 24px 16px;
+            text-align: center;
+            background-color: #F8F9FA;
+            margin-top: 10px;
+            transition: all 0.2s ease-in-out;
+        }
+        .empty-state-box:hover {
+            border-color: #CED4DA;
+            background-color: #F1F3F5;
+        }
+        .empty-state-icon {
+            font-size: 26px;
+            margin-bottom: 8px;
+            opacity: 0.8;
+        }
+        .empty-state-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: #495057;
+            margin-bottom: 6px;
+            letter-spacing: -0.5px;
+        }
+        .empty-state-desc {
+            font-size: 13px;
+            color: #868E96;
+            line-height: 1.4;
+            word-break: keep-all;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -102,7 +133,13 @@ def show_upload_screen():
         with h_col3: st.button("➖", key="up_rem_hl", on_click=remove_rank_upload, args=('hl',), use_container_width=True)
 
         if not st.session_state.up_hl_ranks:
-            st.info("순위 미지정\n\n형광펜 색상에 따른 추가 가중치가 부여되지 않습니다.")
+            st.markdown("""
+            <div class='empty-state-box'>
+                <div class='empty-state-icon'>🖍️</div>
+                <div class='empty-state-title'>순위 미지정</div>
+                <div class='empty-state-desc'>형광펜 색상에 따른<br>추가 가중치가 부여되지 않습니다.</div>
+            </div>
+            """, unsafe_allow_html=True)
         else:
             for i in range(len(st.session_state.up_hl_ranks)):
                 label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
@@ -121,7 +158,13 @@ def show_upload_screen():
         with p_col3: st.button("➖", key="up_rem_pen", on_click=remove_rank_upload, args=('pen',), use_container_width=True)
 
         if not st.session_state.up_pen_ranks:
-            st.info("순위 미지정\n\n필기 내용은 가중치 점수 없이 텍스트 맥락 파악 용도로만 AI가 참고합니다.")
+            st.markdown("""
+            <div class='empty-state-box'>
+                <div class='empty-state-icon'>🖍️</div>
+                <div class='empty-state-title'>순위 미지정</div>
+                <div class='empty-state-desc'>필기 내용은 가중치 점수 없이<br>텍스트 맥락 파악 용도로만 AI가 참고합니다.</div>
+            </div>
+            """, unsafe_allow_html=True)
         else:
             for i in range(len(st.session_state.up_pen_ranks)):
                 label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
