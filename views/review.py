@@ -60,7 +60,7 @@ def convert_wrong_question(w):
         options_list = [f"{k} {v}" for k, v in w["options"].items()]
 
     return {
-        "id": f"Q{str(w['question_id']).zfill(2)}",
+        "id": f"Q{str(w.get('question_number', w['question_id'])).zfill(2)}",
         "imp": priority_map.get(w.get("priority", 3), "Y"),
         "type": type_map.get(w.get("question_type"), "객관식"),
         "text": w.get("question_text", ""),
