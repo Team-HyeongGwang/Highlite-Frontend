@@ -96,7 +96,7 @@ else:
         user_id = st.session_state.get("user_info", {}).get("user_id")
         hl, pen = fetch_rank_colors(user_id)
         st.session_state.hl_ranks = hl if hl else ["🟨 노랑"]
-        st.session_state.pen_ranks = pen if pen else ["🟥 빨강"]
+        st.session_state.pen_ranks = pen if pen else []
     
     if 'show_mypage' not in st.session_state: 
         st.session_state.show_mypage = False
@@ -157,16 +157,25 @@ else:
             h_c1, h_c2 = st.columns(2)
             h_c1.button("➕ 추가", key="dlg_add_hl", on_click=add_rank, args=('hl',), use_container_width=True)
             h_c2.button("➖ 삭제", key="dlg_rem_hl", on_click=remove_rank, args=('hl',), use_container_width=True)
-            for i in range(len(st.session_state.hl_ranks)):
-                st.session_state.hl_ranks[i] = st.selectbox(f"형광펜 {i+1}", color_options, index=color_options.index(st.session_state.hl_ranks[i]), key=f"dlg_hl_{i}")
+            
+            # 형광펜이 비어있을 때
+            if not st.session_state.hl_ranks:
+                st.info("순위 미지정\n\n형광펜 색상에 따른 추가 가중치가 부여되지 않습니다.")
+            else:
+                for i in range(len(st.session_state.hl_ranks)):
+                    st.session_state.hl_ranks[i] = st.selectbox(f"형광펜 {i+1}순위", color_options, index=color_options.index(st.session_state.hl_ranks[i]), key=f"dlg_hl_{i}")
                 
         with col_pen:
             st.write("🖋️ **필기펜** 순위")
             p_c1, p_c2 = st.columns(2)
             p_c1.button("➕ 추가", key="dlg_add_pen", on_click=add_rank, args=('pen',), use_container_width=True)
             p_c2.button("➖ 삭제", key="dlg_rem_pen", on_click=remove_rank, args=('pen',), use_container_width=True)
-            for i in range(len(st.session_state.pen_ranks)):
-                st.session_state.pen_ranks[i] = st.selectbox(f"필기펜 {i+1}", color_options, index=color_options.index(st.session_state.pen_ranks[i]), key=f"dlg_pen_{i}")
+            
+            if not st.session_state.pen_ranks:
+                st.info("순위 미지정\n\n필기 내용은 가중치 점수 없이 텍스트 맥락 파악 용도로만 AI가 참고합니다.")
+            else:
+                for i in range(len(st.session_state.pen_ranks)):
+                    st.session_state.pen_ranks[i] = st.selectbox(f"필기펜 {i+1}순위", color_options, index=color_options.index(st.session_state.pen_ranks[i]), key=f"dlg_pen_{i}")
 
         if st.button("저장 및 닫기", type="primary", use_container_width=True):
             user_id = st.session_state.get("user_info", {}).get("user_id", 9)
@@ -237,16 +246,22 @@ else:
                 importance_settings_dialog()
         
         st.caption("형광펜")
-        for i, color in enumerate(st.session_state.hl_ranks):
-            label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
-            render_rank_badge(i+1, color, label)
+        if not st.session_state.hl_ranks:
+            st.markdown("<div style='font-size:13px; color:#888; margin-bottom: 10px;'>지정된 순위 없음</div>", unsafe_allow_html=True)
+        else:
+            for i, color in enumerate(st.session_state.hl_ranks):
+                label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
+                render_rank_badge(i+1, color, label)
             
         st.write("") 
         
         st.caption("필기펜")
-        for i, color in enumerate(st.session_state.pen_ranks):
-            label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
-            render_rank_badge(i+1, color, label)
+        if not st.session_state.pen_ranks:
+            st.markdown("<div style='font-size:13px; color:#888;'>지정된 순위 없음 (단순 참고용)</div>", unsafe_allow_html=True)
+        else:
+            for i, color in enumerate(st.session_state.pen_ranks):
+                label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
+                render_rank_badge(i+1, color, label)
             
         st.markdown("<hr style='margin: 25px 0; border-color: rgba(151,151,151,0.2);'>", unsafe_allow_html=True)
         

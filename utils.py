@@ -3,13 +3,13 @@ import requests
 
 # 공통으로 쓰는 색상 데이터
 # UI 표시용 색상
-color_options = ["🟨 노랑", "🟥 빨강", "🟧 주황", "🟩 초록", "🟦 파랑", "🟪 보라", "⬛ 검정", "선택 안함"]
+color_options = ["🟥 빨강", "🟧 주황", "🟨 노랑", "🟩 초록", "🟦 파랑", "🟪 보라", "⬛ 검정", "선택 안함"]
 
 # DB 저장용 매핑
 color_map = {
-    "🟨 노랑": "yellow",
     "🟥 빨강": "red",
     "🟧 주황": "orange",
+    "🟨 노랑": "yellow",
     "🟩 초록": "green",
     "🟦 파랑": "blue",
     "🟪 보라": "purple",
@@ -35,23 +35,26 @@ def convert_json_to_rank(json_data):
 # 공통 순위 추가/삭제 함수
 def add_rank(type):
     target = st.session_state.hl_ranks if type == 'hl' else st.session_state.pen_ranks
-    if len(target) < 3: target.append("선택 안함")
-    # st.rerun()
+    if len(target) < 3: 
+        default_color = "🟨 노랑" if type == 'hl' else "🟥 빨강"
+        target.append(default_color)
 
 def remove_rank(type):
     target = st.session_state.hl_ranks if type == 'hl' else st.session_state.pen_ranks
-    if len(target) > 1: target.pop()
+    if len(target) > 0: target.pop()
     # st.rerun()
     
     
 # 업로드 화면 전용 (up_hl_ranks, up_pen_ranks 사용)
 def add_rank_upload(type):
     target = st.session_state.up_hl_ranks if type == 'hl' else st.session_state.up_pen_ranks
-    if len(target) < 3: target.append("선택 안함")
+    if len(target) < 3: 
+        default_color = "🟨 노랑" if type == 'hl' else "🟥 빨강"
+        target.append(default_color)
 
 def remove_rank_upload(type):
     target = st.session_state.up_hl_ranks if type == 'hl' else st.session_state.up_pen_ranks
-    if len(target) > 1: target.pop()
+    if len(target) > 0: target.pop()
     
     
 # 사용자 랭킹 정보 가져오기
