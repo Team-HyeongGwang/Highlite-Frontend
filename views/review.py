@@ -75,6 +75,7 @@ def convert_wrong_question(w):
 
 
 def show_review_screen():
+
     # ──────────────────────────────────────────
     # 세션 초기화
     # ──────────────────────────────────────────
@@ -112,11 +113,12 @@ def show_review_screen():
             st.info("오답이 없습니다.")
             return
 
-        # 문서 정보 가져오기 (제목, 회차)
         doc_title = st.session_state.get("review_doc_title", "문서")
         doc_round = st.session_state.get("review_doc_round", "")
-
         resolved_set = st.session_state.resolved_questions.get(str(quiz_result_id), set())
+
+        imp_map = {"R": "r", "O": "o", "Y": "y"}
+        imp_label = {"R": "핵심", "O": "중요", "Y": "참고"}
 
         # ──────────────────────────────────────────
         # [화면 C] 오답 다시 풀기 모드
@@ -132,6 +134,7 @@ def show_review_screen():
 
             st.write("")
             st.markdown("### 📝 오답 다시 풀기")
+            st.caption("틀렸던 문제들을 다시 풀어보며 취약점을 완벽하게 보완해 보세요!")
 
             retry_questions = [q for q in wrong_answers if q['id'] not in resolved_set]
 
@@ -151,8 +154,7 @@ def show_review_screen():
 
             if solved_count > 0:
                 st.caption(f"전체 {total_wrong}문제 중 {solved_count}문제 해결 완료 · 남은 문제 {remaining}개")
-            else:
-                st.caption("틀렸던 문제들을 다시 풀어보며 취약점을 완벽하게 보완해 보세요!")
+
             st.divider()
 
             is_graded = st.session_state.retry_graded
@@ -164,15 +166,12 @@ def show_review_screen():
                     if str(user_choice).strip() == q['correct']:
                         correct_count += 1
                 st.write("")
-                # ← 초록 박스로 채점 결과 표시
                 st.success(f"총 {len(retry_questions)}문제 중 **{correct_count}문제**를 맞혔습니다. (정답률 {round(correct_count / len(retry_questions) * 100) if retry_questions else 0}%)")
                 if correct_count == len(retry_questions):
                     st.balloons()
                 st.write("")
 
-            imp_map = {"R": "r", "O": "o", "Y": "y"}
-            imp_label = {"R": "핵심", "O": "중요", "Y": "참고"}
-
+            # ── 문제 카드 렌더링 ──
             for q in retry_questions:
                 with st.container(border=True):
                     user_choice = st.session_state.get(f"retry_ans_{q['id']}", "")
@@ -203,11 +202,14 @@ def show_review_screen():
                         with ans_col2:
                             st.info(f"✅ **정답:** &nbsp; {q['correct']}")
                         st.write("")
-                        with st.expander("해설 보기", expanded=True):
-                            st.write(q['exp'])
 
+                    # 해설 토글 (채점 전후 모두 표시)
+                    with st.expander("해설 보기", expanded=is_graded):
+                        st.write(q['exp'])
+
+            # ── 채점 / 복습 완료 버튼 ──
+            st.markdown("<hr>", unsafe_allow_html=True)
             if not is_graded:
-                st.write("")
                 if st.button("채점", type="primary", use_container_width=True):
                     st.session_state.retry_graded = True
                     st.rerun()
@@ -218,7 +220,6 @@ def show_review_screen():
                     if str(user_choice).strip() == q['correct']:
                         newly_resolved.add(q['id'])
 
-                st.write("")
                 if st.button("복습 완료", type="primary", use_container_width=True):
                     key = str(quiz_result_id)
                     if key not in st.session_state.resolved_questions:
@@ -230,7 +231,7 @@ def show_review_screen():
             return
 
         # ──────────────────────────────────────────
-        # [화면 A] 오답 보기 상세 화면
+        # [화면 A] 오답 상세 보기
         # ──────────────────────────────────────────
         btn_c1, btn_space, btn_c2 = st.columns([2, 6, 2.5])
         with btn_c1:
@@ -242,15 +243,16 @@ def show_review_screen():
                     if key.startswith("view_ans_"):
                         del st.session_state[key]
 
-                # ← 진입 경로에 따라 이동
+                # 진입 경로에 따라 이동
                 if st.session_state.get("review_from") == "library":
                     st.session_state.review_from = None
                     st.session_state.current_page = None
                     st.session_state.current_menu = "문서 라이브러리"
                 else:
-                    st.session_state.current_page = "review"  # 오답 노트 목록으로
+                    st.session_state.current_page = "review"
+                    st.session_state.current_menu = "오답 노트"
                 st.rerun()
-        
+
         with btn_c2:
             all_resolved = len(resolved_set) >= len(wrong_answers)
             retry_label = "모두 해결 완료!" if all_resolved else "오답 다시 풀기 ↻"
@@ -266,6 +268,7 @@ def show_review_screen():
 
         st.write("")
 
+        # 해결 현황 프로그레스바
         if len(resolved_set) > 0:
             total_wrong = len(wrong_answers)
             solved_count = len(resolved_set)
@@ -273,7 +276,7 @@ def show_review_screen():
             st.progress(solved_count / total_wrong)
             st.write("")
 
-        # ← 문서이름 (n회차) 오답 노트 형식으로 출력
+        # 오답 노트 타이틀
         st.markdown(
             f"### {doc_title} <span style='font-size: 20px; color: #888;'>({doc_round}회차)</span> 오답 노트",
             unsafe_allow_html=True
@@ -284,9 +287,7 @@ def show_review_screen():
         unresolved_qs = [q for q in wrong_answers if q['id'] not in resolved_set]
         resolved_qs = [q for q in wrong_answers if q['id'] in resolved_set]
 
-        imp_map = {"R": "r", "O": "o", "Y": "y"}
-        imp_label = {"R": "핵심", "O": "중요", "Y": "참고"}
-
+        # ── 오답 카드 렌더링 함수 ──
         def render_wrong_question_card(q, is_resolved=False):
             if is_resolved:
                 st.markdown("<div style='opacity: 0.45; pointer-events: none;'>", unsafe_allow_html=True)
@@ -310,16 +311,19 @@ def show_review_screen():
                 with ans_col2:
                     st.info(f"✅ **정답:** &nbsp; {q['correct']}")
 
+                # 해설 토글
                 st.write("")
-                with st.expander("해설 보기 ▾", expanded=not is_resolved):
+                with st.expander("해설 보기", expanded=not is_resolved):
                     st.write(q['exp'])
 
             if is_resolved:
                 st.markdown("</div>", unsafe_allow_html=True)
 
+        # 미해결 오답 먼저 표시
         for q in unresolved_qs:
             render_wrong_question_card(q, is_resolved=False)
 
+        # 해결된 오답 아래에 표시
         if resolved_qs:
             st.write("")
             st.markdown(
@@ -333,7 +337,7 @@ def show_review_screen():
         return
 
     # ──────────────────────────────────────────
-    # [화면 B] 오답 노트 메인 목록 화면
+    # [화면 B] 오답 노트 메인 목록
     # ──────────────────────────────────────────
     st.markdown("### 오답 노트 &nbsp; <span style='font-size: 14px; font-weight: normal; color: #888;'>문서별 오답 기록 관리</span>", unsafe_allow_html=True)
     st.write("")
@@ -343,6 +347,7 @@ def show_review_screen():
         st.warning("로그인이 필요합니다.")
         return
 
+    # ── API에서 오답 있는 회차만 필터링 ──
     try:
         response = requests.get(
             f"{BASE_URL}/question/list",
@@ -356,7 +361,6 @@ def show_review_screen():
     except Exception:
         api_documents = []
 
-    # 오답이 있는 회차만 필터링
     filtered_reviews = []
     for doc in api_documents:
         wrong_attempts = []
@@ -390,6 +394,7 @@ def show_review_screen():
         st.markdown("<p style='color: #888; font-size: 15px;'>문제를 풀고 채점하면 틀린 문제들이 이곳에 차곡차곡 쌓입니다!</p>", unsafe_allow_html=True)
         return
 
+    # ── 회차 선택 및 일괄 삭제 ──
     selected_attempts = []
     for file in filtered_reviews:
         for attempt in file['attempts']:
@@ -446,6 +451,7 @@ def show_review_screen():
 
     st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
 
+    # ── 문서별 오답 목록 렌더링 ──
     for file in filtered_reviews:
         with st.expander(f"📁 **{file['title']}** (총 {file['total_count']}회 오답 기록)", expanded=True):
 
@@ -483,7 +489,6 @@ def show_review_screen():
 
                 with row_cols[6]:
                     if st.button("오답 보기 ↗", key=f"btn_view_wr_{attempt['id']}", use_container_width=True):
-                        # ← 문서 제목과 회차 세션에 저장
                         st.session_state.selected_quiz_result_id = attempt["quiz_result_id"]
                         st.session_state.review_doc_title = file["title"]
                         st.session_state.review_doc_round = attempt["round"]
