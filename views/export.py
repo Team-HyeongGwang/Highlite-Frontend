@@ -165,7 +165,7 @@ def _do_preview(export_content: str, group_id: str, preview_key: str,
             params = {"group_id": group_id, "format": "md"}
             if export_content == "문제 + 해설":
                 params["filter"] = export_filter
-                if export_filter == "오답만" and user_id:
+                if export_filter in ("오답만", "핵심만", "중요만") and user_id:
                     params["user_id"] = user_id
             resp = requests.get(endpoint, params=params, timeout=60)
             if resp.status_code == 200:
@@ -251,7 +251,7 @@ def _do_export(
             params = {"group_id": group_id, "format": fmt}
             if export_content == "문제 + 해설":
                 params["filter"] = export_filter
-                if export_filter == "오답만" and user_id:
+                if export_filter in ("오답만", "핵심만", "중요만") and user_id:
                     params["user_id"] = user_id
             resp = requests.get(endpoint, params=params, timeout=60)
             if resp.status_code == 200:
