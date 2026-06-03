@@ -4,10 +4,13 @@ import requests
 BASE_URL = "http://127.0.0.1:8000"
 
 # ────────────────────────────────────────
-# 문제 유형별 렌더링
+# 문제 유형별 렌더링 (Key 충돌 및 유실 오류 수정)
 # ────────────────────────────────────────
-def render_question_input(q, q_id, prefix, is_disabled=False, prefill_ans=None):
-    key = f"{prefix}_{q_id}"
+def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
+    # 각 문제 카드별로 완전하게 독립된 Key를 보장하기 위해 고유 Index와 attempt 정보를 조합
+    attempt_id = st.session_state.get("retry_attempt", 0)
+    key = f"{prefix}_{idx}_{attempt_id}"
+    widget_key = f"widget_{prefix}_{idx}_{attempt_id}"
 
     if key not in st.session_state:
         st.session_state[key] = prefill_ans
@@ -17,12 +20,23 @@ def render_question_input(q, q_id, prefix, is_disabled=False, prefill_ans=None):
         current_val = st.session_state.get(key)
         try:
             selected_index = next(
-                (i for i, opt in enumerate(options) if current_val and opt.startswith(current_val)),
+                (i for i, opt in enumerate(options) if current_val and (opt == current_val or opt.startswith(current_val))),
                 None
             )
         except Exception:
             selected_index = None
-        return st.radio("보기", options=options, key=key, index=selected_index, label_visibility="collapsed", disabled=is_disabled)
+            
+        selected = st.radio(
+            "보기", 
+            options=options, 
+            key=widget_key, 
+            index=selected_index, 
+            label_visibility="collapsed", 
+            disabled=is_disabled
+        )
+        if selected is not None:
+            st.session_state[key] = selected
+        return selected
 
     elif q['type'] == "OX":
         col1, col2 = st.columns(2)
@@ -39,15 +53,23 @@ def render_question_input(q, q_id, prefix, is_disabled=False, prefill_ans=None):
         return st.session_state.get(key)
 
     elif q['type'] == "빈칸채우기":
-        if prefill_ans and key not in st.session_state:
-            st.session_state[key] = prefill_ans
-        return st.text_input("정답 입력", key=key, placeholder="정답을 입력하세요", label_visibility="collapsed", disabled=is_disabled)
+        val = st.text_input(
+            "정답 입력", 
+            key=widget_key, 
+            value=st.session_state.get(key, ""), 
+            placeholder="정답을 입력하세요", 
+            label_visibility="collapsed", 
+            disabled=is_disabled
+        )
+        if val:
+            st.session_state[key] = val
+        return val
 
 
 # ────────────────────────────────────────
 # 오답 데이터 변환
 # ────────────────────────────────────────
-def convert_wrong_question(w):
+def convert_wrong_question(w, idx):
     type_map = {
         "multiple_choice": "객관식",
         "ox": "OX",
@@ -60,6 +82,7 @@ def convert_wrong_question(w):
         options_list = [f"{k} {v}" for k, v in w["options"].items()]
 
     return {
+        "index": idx,  # 세션 키 고정을 위한 고유 인덱스 추가
         "id": f"Q{str(w.get('question_number', w['question_id'])).zfill(2)}",
         "imp": priority_map.get(w.get("priority", 3), "Y"),
         "type": type_map.get(w.get("question_type"), "객관식"),
@@ -87,6 +110,8 @@ def show_review_screen():
         st.session_state.resolved_questions = {}
     if 'retry_result' not in st.session_state:
         st.session_state.retry_result = {}
+    if 'retry_attempt' not in st.session_state:
+        st.session_state.retry_attempt = 0
 
     quiz_result_id = st.session_state.get("selected_quiz_result_id")
 
@@ -102,7 +127,8 @@ def show_review_screen():
             )
             if response.status_code == 200:
                 data = response.json()
-                wrong_answers = [convert_wrong_question(w) for w in data.get("wrong_answers", [])]
+                # 인덱스(idx)를 매핑에 함께 주입하여 고유성을 확보합니다.
+                wrong_answers = [convert_wrong_question(w, i) for i, w in enumerate(data.get("wrong_answers", []))]
             else:
                 wrong_answers = []
         except Exception as e:
@@ -126,7 +152,7 @@ def show_review_screen():
         if st.session_state.retry_mode_active:
             btn_c1, _ = st.columns([3, 7])
             with btn_c1:
-                if st.button("← 돌아가기"):
+                if st.button("← 오답 노트로 돌아가기"):
                     st.session_state.retry_mode_active = False
                     st.session_state.retry_graded = False
                     st.session_state.retry_result = {}
@@ -160,11 +186,18 @@ def show_review_screen():
             is_graded = st.session_state.retry_graded
             correct_count = 0
 
+            # 채점 완료 상태일 때 상단 스코어 계산 로직
             if is_graded:
+                attempt_id = st.session_state.retry_attempt
                 for q in retry_questions:
-                    user_choice = st.session_state.get(f"retry_ans_{q['id']}", "")
-                    if str(user_choice).strip() == q['correct']:
+                    user_choice = st.session_state.get(f"retry_ans_{q['index']}_{attempt_id}", "")
+                    if user_choice and q['type'] == "객관식" and not user_choice.startswith(q['correct']):
+                        # 보기 전체 텍스트와 정답 기호 분리 매칭용 예외 처리
+                        if str(user_choice).strip() == q['correct']:
+                            correct_count += 1
+                    elif str(user_choice).strip() == q['correct'] or str(user_choice).startswith(q['correct']):
                         correct_count += 1
+                        
                 st.write("")
                 st.success(f"총 {len(retry_questions)}문제 중 **{correct_count}문제**를 맞혔습니다. (정답률 {round(correct_count / len(retry_questions) * 100) if retry_questions else 0}%)")
                 if correct_count == len(retry_questions):
@@ -172,10 +205,16 @@ def show_review_screen():
                 st.write("")
 
             # ── 문제 카드 렌더링 ──
+            attempt_id = st.session_state.retry_attempt
             for q in retry_questions:
                 with st.container(border=True):
-                    user_choice = st.session_state.get(f"retry_ans_{q['id']}", "")
-                    is_correct = (str(user_choice).strip() == q['correct']) if is_graded else False
+                    user_choice = st.session_state.get(f"retry_ans_{q['index']}_{attempt_id}", "")
+                    
+                    # 정답 체크 로직 개선
+                    is_correct = False
+                    if is_graded and user_choice:
+                        if str(user_choice).strip() == q['correct'] or str(user_choice).startswith(q['correct']):
+                            is_correct = True
 
                     mark = ""
                     if is_graded:
@@ -189,7 +228,9 @@ def show_review_screen():
                         st.markdown(f"<div style='text-align: right; color: #888; font-size: 13px;'>{q['source']}</div>", unsafe_allow_html=True)
 
                     st.markdown(f"<div style='margin-top: 15px; margin-bottom: 15px; font-size: 16px; color: var(--text-color);'>{q['text']}</div>", unsafe_allow_html=True)
-                    render_question_input(q, q['id'], prefix="retry_ans", is_disabled=is_graded)
+                    
+                    # 💡 q['id'] 대신 고유 순서 인덱스(q['index'])를 사용하도록 바꿈으로써 데이터 유실 방지
+                    render_question_input(q, q['index'], prefix="retry_ans", is_disabled=is_graded)
 
                     if is_graded:
                         st.write("")
@@ -215,9 +256,10 @@ def show_review_screen():
                     st.rerun()
             else:
                 newly_resolved = set()
+                attempt_id = st.session_state.retry_attempt
                 for q in retry_questions:
-                    user_choice = st.session_state.get(f"retry_ans_{q['id']}", "")
-                    if str(user_choice).strip() == q['correct']:
+                    user_choice = st.session_state.get(f"retry_ans_{q['index']}_{attempt_id}", "")
+                    if user_choice and (str(user_choice).strip() == q['correct'] or str(user_choice).startswith(q['correct'])):
                         newly_resolved.add(q['id'])
 
                 if st.button("복습 완료", type="primary", use_container_width=True):
@@ -231,19 +273,18 @@ def show_review_screen():
             return
 
         # ──────────────────────────────────────────
-        # [화면 A] 오답 상세 보기
+        # [화면 A] 오답 상세 보기 (단순 조회)
         # ──────────────────────────────────────────
         btn_c1, btn_space, btn_c2 = st.columns([2, 6, 2.5])
         with btn_c1:
-            if st.button("← 목록으로 돌아가기"):
+            if st.button("← 오답 목록으로 돌아가기"):
                 st.session_state.selected_quiz_result_id = None
                 st.session_state.retry_mode_active = False
                 st.session_state.retry_graded = False
                 for key in list(st.session_state.keys()):
-                    if key.startswith("view_ans_"):
+                    if key.startswith("view_ans_") or key.startswith("widget_view_ans_"):
                         del st.session_state[key]
 
-                # 진입 경로에 따라 이동
                 if st.session_state.get("review_from") == "library":
                     st.session_state.review_from = None
                     st.session_state.current_page = None
@@ -259,11 +300,12 @@ def show_review_screen():
             if st.button(retry_label, type="primary", use_container_width=True, disabled=all_resolved):
                 st.session_state.retry_mode_active = True
                 st.session_state.retry_graded = False
-                for q in wrong_answers:
-                    if q['id'] not in resolved_set:
-                        ans_key = f"retry_ans_{q['id']}"
-                        if ans_key in st.session_state:
-                            del st.session_state[ans_key]
+                st.session_state.retry_attempt += 1  # 새 풀이 시 시도 횟수 올림으로써 캐시 완전 초기화
+                
+                # 기존 풀이용 임시 위젯 데이터 깔끔히 청소
+                for k in list(st.session_state.keys()):
+                    if k.startswith("retry_ans_") or k.startswith("widget_retry_ans_"):
+                        del st.session_state[k]
                 st.rerun()
 
         st.write("")
@@ -302,7 +344,9 @@ def show_review_screen():
                     st.markdown(f"<div style='text-align: right; color: #888; font-size: 13px;'>{q['source']}</div>", unsafe_allow_html=True)
 
                 st.markdown(f"<div style='margin-top: 15px; margin-bottom: 15px; font-size: 16px; color: var(--text-color);'>{q['text']}</div>", unsafe_allow_html=True)
-                render_question_input(q, q['id'], prefix="view_ans", is_disabled=True, prefill_ans=q['my_ans'])
+                
+                # 단순 오답 보기 화면에서도 고유 인덱스를 Key에 매핑
+                render_question_input(q, q['index'], prefix="view_ans", is_disabled=True, prefill_ans=q['my_ans'])
 
                 st.write("")
                 ans_col1, ans_col2 = st.columns(2)
