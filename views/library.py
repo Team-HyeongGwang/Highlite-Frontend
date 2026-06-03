@@ -226,7 +226,8 @@ def show_library_screen():
                                 st.session_state.quiz_phase = "first_attempt"
                                 st.session_state.quiz_result = {}
                                 st.session_state.retry_counts = {}
-                                st.session_state.current_page = "quiz"
+                                st.session_state.quiz_attempt = 0  # ← 차수 초기화
+                                st.toast("문제 재생성이 완료되었습니다!", icon="✅")
                                 st.rerun()
                             else:
                                 st.toast("생성된 문제가 없습니다.", icon="⚠️")
