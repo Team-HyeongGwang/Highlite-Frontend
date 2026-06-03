@@ -7,8 +7,29 @@ def show_export_screen():
     st.markdown("### 문제 내보내기 &nbsp; <span style='font-size: 14px; font-weight: normal; color: #888;'>생성한 문제를 다른 도구로 가져갈 수 있습니다</span>", unsafe_allow_html=True)
     st.write("")
 
-    grouped_files = st.session_state.get("grouped_files", [])
-    file_titles = [f["title"] for f in grouped_files]
+    user_id = st.session_state.get("user_info", {}).get("user_id")
+    docs = []
+    if user_id:
+        try:
+            resp = requests.get(
+                f"{BASE_URL}/question/list",
+                params={"user_id": user_id},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                seen_group_ids = set()
+                for doc in resp.json().get("documents", []):
+                    gid = doc.get("group_id")
+                    if gid and gid not in seen_group_ids:
+                        seen_group_ids.add(gid)
+                        docs.append({
+                            "title": doc["title"],
+                            "group_id": gid,
+                        })
+        except Exception:
+            pass
+
+    file_titles = [d["title"] for d in docs]
 
     col1, col2, col3 = st.columns(3)
 
@@ -55,16 +76,14 @@ def show_export_screen():
     st.write("")
     st.write("")
 
-    # 선택된 파일의 group_id 찾기
     selected_group_id = None
     if selected_file_title:
-        for f in grouped_files:
-            if f["title"] == selected_file_title:
-                selected_group_id = f["id"]
+        for d in docs:
+            if d["title"] == selected_file_title:
+                selected_group_id = d["group_id"]
                 break
 
-    # 선택이 바뀌면 기존 다운로드 데이터 초기화
-    current_key = f"{selected_group_id}_{export_format}"
+    current_key = f"{selected_group_id}_{export_format}_{export_content}"
     if st.session_state.get("export_key") != current_key:
         st.session_state.pop("export_ready", None)
         st.session_state.pop("export_filename", None)
@@ -84,7 +103,7 @@ def show_export_screen():
         with b_col3:
             st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
 
-            can_export = (export_content == "요약본" and selected_group_id is not None)
+            can_export = selected_group_id is not None
 
             if "export_ready" in st.session_state and can_export:
                 st.download_button(
@@ -96,17 +115,26 @@ def show_export_screen():
                     use_container_width=True,
                 )
             else:
+                if export_content == "요약본":
+                    endpoint = f"{BASE_URL}/export/summary"
+                    spinner_msg = "요약본 생성 중..."
+                    filename_suffix = "summary"
+                else:
+                    endpoint = f"{BASE_URL}/export/questions"
+                    spinner_msg = "문제지 생성 중..."
+                    filename_suffix = "questions"
+
                 if st.button("내보내기", type="primary", use_container_width=True, disabled=not can_export):
                     fmt = export_format.lower()
-                    with st.spinner("요약본 생성 중..."):
+                    with st.spinner(spinner_msg):
                         try:
                             resp = requests.get(
-                                f"{BASE_URL}/export/summary",
+                                endpoint,
                                 params={"group_id": selected_group_id, "format": fmt},
-                                timeout=30,
+                                timeout=60,
                             )
                             if resp.status_code == 200:
-                                filename = f"{selected_file_title.replace('.pdf', '')}_summary.{fmt}"
+                                filename = f"{selected_file_title.replace('.pdf', '')}_{filename_suffix}.{fmt}"
                                 mime = "application/pdf" if fmt == "pdf" else "text/markdown"
                                 st.session_state.export_ready = resp.content
                                 st.session_state.export_filename = filename
