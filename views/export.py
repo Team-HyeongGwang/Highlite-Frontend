@@ -139,7 +139,12 @@ def show_export_screen():
     cached_preview_key = st.session_state.get("preview_key")
     if cached_preview and cached_preview_key == preview_key:
         with st.expander("미리보기", expanded=True):
-            st.markdown(cached_preview)
+            display_text = cached_preview
+            display_text = display_text.replace("\n# ", "\n#### ")
+            display_text = display_text.replace("\n## ", "\n##### ")
+            if display_text.startswith("# "):
+                display_text = "#### " + display_text[2:]
+            st.markdown(display_text)
 
 
 def _do_preview(export_content: str, group_id: str, preview_key: str,
