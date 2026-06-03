@@ -64,7 +64,7 @@ def show_library_screen():
             "attempts": attempts,
         })
 
-    # 문서 순서 고정: document_id 기준 정렬 (제목 변경해도 순서 유지)
+    # 문서 순서 고정: document_id 기준 정렬
     grouped_files = sorted(grouped_files, key=lambda x: x["id"])
 
     # 문서가 없을 때 빈 화면
@@ -144,7 +144,7 @@ def show_library_screen():
     st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
 
     # ──────────────────────────────────────────
-    # 폴더명 변경 다이얼로그 (유진이 코드 참고)
+    # 폴더명 변경 다이얼로그
     # ──────────────────────────────────────────
     @st.dialog("문서 이름 변경")
     def rename_doc_dialog(f_id, current_title, group_id):
@@ -180,7 +180,6 @@ def show_library_screen():
     # 문서 폴더 목록 렌더링
     # ──────────────────────────────────────────
     for file in grouped_files:
-        # ← 유진이 코드 참고: 제목 | ✏️ | 재생성 3열 레이아웃
         col_folder_title, col_edit, col_regen = st.columns([7.5, 0.5, 2])
 
         # ── 폴더 제목 ──
@@ -191,7 +190,7 @@ def show_library_screen():
                 unsafe_allow_html=True
             )
 
-        # ── 폴더명 수정 버튼 (✏️ 아이콘) ──
+        # ── 폴더명 수정 버튼 ──
         with col_edit:
             if st.button("✏️", key=f"btn_edit_{file['id']}", help="문서 이름 변경"):
                 rename_doc_dialog(file['id'], file['title'], file.get('group_id'))
@@ -220,14 +219,22 @@ def show_library_screen():
                             result = regen_response.json()
                             questions = result.get("questions", [])
                             if questions:
+                                # 기존 세션 및 캐시 초기화
+                                for k in list(st.session_state.keys()):
+                                    if k.startswith("ans_") or k.startswith("widget_ans_"):
+                                        del st.session_state[k]
+
                                 st.session_state.questions = questions
                                 st.session_state.document_id = doc_id
                                 st.session_state.quiz_group_id = str(result.get("quiz_group_id", ""))
                                 st.session_state.quiz_phase = "first_attempt"
                                 st.session_state.quiz_result = {}
                                 st.session_state.retry_counts = {}
-                                st.session_state.quiz_attempt = 0  # ← 차수 초기화
+                                st.session_state.quiz_attempt = 0 
+                                st.session_state.quiz_entry_point = "direct" # 직통 풀이 모드 명시
+                                
                                 st.toast("문제 재생성이 완료되었습니다!", icon="✅")
+                                st.session_state.current_page = "quiz"
                                 st.rerun()
                             else:
                                 st.toast("생성된 문제가 없습니다.", icon="⚠️")
@@ -267,7 +274,7 @@ def show_library_screen():
                         with c_score:
                             st.markdown(f"<span style='color: {score_color}; font-weight: 800; line-height: 2.2;'>{attempt['score']}</span>", unsafe_allow_html=True)
 
-                        # ── 문제 버튼: 해당 회차 문제 + 채점 결과 불러오기 ──
+                        # ── 문제 버튼 클릭 시 캐시 청소 및 진입점 주입 ──
                         with c_q:
                             if st.button("문제", key=f"btn_q_{attempt['id']}", use_container_width=True):
                                 quiz_group_id = attempt.get("quiz_group_id")
@@ -281,11 +288,20 @@ def show_library_screen():
                                             timeout=30
                                         )
                                         if q_response.status_code == 200:
+                                            # 전 회차/세션의 빈칸 및 컴포넌트 입력 메모리 완전 삭제
+                                            for k in list(st.session_state.keys()):
+                                                if k.startswith("ans_") or k.startswith("widget_ans_"):
+                                                    del st.session_state[k]
+
                                             q_data = q_response.json()
                                             st.session_state.questions = q_data["questions"]
                                             st.session_state.quiz_group_id = quiz_group_id
                                             st.session_state.document_id = str(file.get("document_id"))
                                             st.session_state.retry_counts = {}
+                                            st.session_state.quiz_attempt = 0
+                                            
+                                            # 라이브러리 연동 모드 활성화 (돌아가기 및 다시 풀기 활성화)
+                                            st.session_state.quiz_entry_point = "library" 
 
                                             if attempt['score'] == "-":
                                                 st.session_state.quiz_phase = "first_attempt"
@@ -314,7 +330,7 @@ def show_library_screen():
                                     except Exception as e:
                                         st.toast(f"서버 연결 오류: {e}", icon="❌")
 
-                        # ── 오답 버튼: 해당 회차 오답 노트로 이동 ──
+                        # ── 오답 버튼 ──
                         with c_w:
                             if st.button("오답", key=f"btn_w_{attempt['id']}", use_container_width=True):
                                 if attempt['score'] == "-":
