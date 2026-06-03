@@ -103,8 +103,11 @@ def show_feedback_dialog(q_id, q):
                         st.session_state.questions[i]["answer"] = new_q["answer"]
                         st.session_state.questions[i]["explanation"] = new_q["explanation"]
 
-                        if f"ans_{i}" in st.session_state:
-                            del st.session_state[f"ans_{i}"]
+                        attempt_id = st.session_state.get("quiz_attempt", 0)
+                        retry_id = st.session_state.get("retry_counts", {}).get(q_id, 0)
+                        for k in [f"ans_{i}_{attempt_id}_{retry_id}", f"widget_ans_{i}_{attempt_id}_{retry_id}"]:
+                            if k in st.session_state:
+                                del st.session_state[k]
 
                         if "quiz_result" in st.session_state:
                             results = st.session_state.quiz_result.get("results", [])
@@ -128,10 +131,15 @@ def show_feedback_dialog(q_id, q):
             st.toast(f"서버 연결 오류: {e}", icon="❌")
 
 # ────────────────────────────────────────
-# 문제 유형별 렌더링
+# 문제 유형별 입력 렌더링
 # ────────────────────────────────────────
 def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
-    key = f"{prefix}_{idx}"
+    attempt_id = st.session_state.get("quiz_attempt", 0)
+    q_id = q.get("id")
+    retry_id = st.session_state.get("retry_counts", {}).get(q_id, 0)
+    
+    key = f"{prefix}_{idx}_{attempt_id}_{retry_id}"
+    widget_key = f"widget_{prefix}_{idx}_{attempt_id}_{retry_id}"
 
     if key not in st.session_state:
         st.session_state[key] = prefill_ans
@@ -140,23 +148,26 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
         options = q.get('options', [])
         current_val = st.session_state.get(key)
 
-        # 현재 세션값과 일치하는 옵션 인덱스 찾기
         try:
             selected_index = next(
-                (i for i, opt in enumerate(options) if current_val and opt.startswith(current_val)),
+                (i for i, opt in enumerate(options)
+                 if current_val and (opt == current_val or opt.startswith(current_val))),
                 None
             )
         except Exception:
             selected_index = None
 
-        return st.radio(
+        selected = st.radio(
             "보기",
             options=options,
-            key=key,
+            key=widget_key,
             index=selected_index,
             label_visibility="collapsed",
             disabled=is_disabled
         )
+        if selected is not None:
+            st.session_state[key] = selected
+        return selected
 
     elif q['type'] == "OX":
         col1, col2 = st.columns(2)
@@ -173,29 +184,27 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
         return st.session_state.get(key)
 
     elif q['type'] == "빈칸채우기":
-        # prefill_ans가 있으면 세션에 미리 채워줌 (review 모드에서 이전 답 표시)
-        if prefill_ans and key not in st.session_state:
-            st.session_state[key] = prefill_ans
-
-        return st.text_input(
+        val = st.text_input(
             "정답 입력",
-            key=key,
+            key=widget_key,
+            value=st.session_state.get(key, ""),
             placeholder="정답을 입력하세요",
             label_visibility="collapsed",
             disabled=is_disabled
         )
+        if val:
+            st.session_state[key] = val
+        return val
 
 # ────────────────────────────────────────
 # 메인 화면
 # ────────────────────────────────────────
 def show_quiz_screen():
-    # 로그인된 user_id 세션에서 가져오기
     user_id = st.session_state.get("user_info", {}).get("user_id")
     if not user_id:
         st.warning("로그인이 필요합니다.")
         return
 
-    # document_id 세션에서 가져오기
     document_id = st.session_state.get("document_id")
     if not document_id:
         st.warning("문서 정보가 없습니다. 업로드 화면에서 문제를 먼저 생성해주세요.")
@@ -205,32 +214,33 @@ def show_quiz_screen():
         st.warning("생성된 문제가 없습니다. 업로드 화면에서 문제를 먼저 생성해주세요.")
         return
 
-    # 백엔드 응답 → 프론트 형식 변환
-    questions = [
-        convert_question(q, idx)
-        for idx, q in enumerate(st.session_state.questions)
-    ]
-    
-    # ← 추가: review 모드일 때 quiz_result에서 답안 세션에 채우기
-    if st.session_state.quiz_phase == "review":
-        quiz_result = st.session_state.get("quiz_result", {})
-        results = {r["question_id"]: r for r in quiz_result.get("results", [])}
-        for idx, q in enumerate(questions):
-            ans_key = f"ans_{idx}"
-            if ans_key not in st.session_state or not st.session_state.get(ans_key):
-                result = results.get(q["question_id"], {})
-                submitted = result.get("submitted_answer", "")
-                if submitted:
-                    st.session_state[ans_key] = submitted
-    
-    
     if 'quiz_phase' not in st.session_state:
         st.session_state.quiz_phase = "first_attempt"
     if 'retry_counts' not in st.session_state:
         st.session_state.retry_counts = {}
+    if 'quiz_attempt' not in st.session_state:
+        st.session_state.quiz_attempt = 0
+
+    questions = [
+        convert_question(q, idx)
+        for idx, q in enumerate(st.session_state.questions)
+    ]
+
+    if st.session_state.get("quiz_phase") == "review":
+        quiz_result = st.session_state.get("quiz_result", {})
+        results = {r["question_id"]: r for r in quiz_result.get("results", [])}
+        attempt_id = st.session_state.quiz_attempt
+        for idx, q in enumerate(questions):
+            q_id = q["id"]
+            retry_id = st.session_state.get("retry_counts", {}).get(q_id, 0)
+            ans_key = f"ans_{idx}_{attempt_id}_{retry_id}"
+            if not st.session_state.get(ans_key):
+                result = results.get(q["question_id"], {})
+                submitted = result.get("submitted_answer", "")
+                if submitted:
+                    st.session_state[ans_key] = submitted
 
     num_q = len(questions)
-
     correct_count = 0
     score_percent = 0
     if st.session_state.quiz_phase == "review":
@@ -239,38 +249,23 @@ def show_quiz_screen():
         score_percent = int((correct_count / num_q) * 100) if num_q > 0 else 0
 
     # ────────────────────────────────────────
-    # 상단 헤더
+    # 상단 헤더 및 버튼
     # ────────────────────────────────────────
-    # 목록 돌아가기 + 다시 풀기 버튼 같은 행에 배치
-    if st.session_state.get("current_page") == "quiz":
-        btn_left, btn_space, btn_right = st.columns([2, 6, 2.5])
-        with btn_left:
-            if st.button("← 목록으로 돌아가기"):
-                st.session_state.current_page = None
-                st.session_state.current_menu = "문서 라이브러리"
+    btn_left, btn_space, btn_right = st.columns([2, 6, 2.5])
+    with btn_left:
+        if st.button("← 라이브러리로 돌아가기"):
+            st.session_state.current_page = None
+            st.session_state.current_menu = "문서 라이브러리"
+            st.rerun()
+    with btn_right:
+        if st.session_state.quiz_phase == "review":
+            if st.button("다시 풀기 ↻", type="primary", use_container_width=True):
+                st.session_state.quiz_attempt += 1
+                st.session_state.quiz_phase = "retake"
                 st.rerun()
-        with btn_right:
-            if st.session_state.quiz_phase == "review":
-                if st.button("다시 풀기 ↻", type="primary", use_container_width=True):
-                    for key in list(st.session_state.keys()):
-                        if key.startswith("ans_") or key.startswith("retry_"):
-                            del st.session_state[key]
-                    st.session_state.quiz_phase = "retake"
-                    st.rerun()
-    else:
-        # 라이브러리 외부(업로드 등)에서 진입 시 다시 풀기만 표시
-        _, btn_right = st.columns([9.5, 2.5])
-        with btn_right:
-            if st.session_state.quiz_phase == "review":
-                if st.button("다시 풀기 ↻", type="primary", use_container_width=True):
-                    for key in list(st.session_state.keys()):
-                        if key.startswith("ans_") or key.startswith("retry_"):
-                            del st.session_state[key]
-                    st.session_state.quiz_phase = "retake"
-                    st.rerun()
-    
+
     # ────────────────────────────────────────
-    # 필터 (핵심/중요/참고 → R/O/Y 매핑)
+    # 중요도 필터
     # ────────────────────────────────────────
     filter_choice = st.radio(
         "필터",
@@ -278,9 +273,8 @@ def show_quiz_screen():
         horizontal=True,
         label_visibility="collapsed"
     )
-    st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True) # 구분선 추가
+    st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
 
-    # 필터 적용
     filter_map = {"전체": None, "핵심": "R", "중요": "O", "참고": "Y"}
     filter_imp = filter_map[filter_choice]
     filtered_questions = questions if not filter_imp else [q for q in questions if q['imp'] == filter_imp]
@@ -296,14 +290,15 @@ def show_quiz_screen():
     # 문제 렌더링
     # ────────────────────────────────────────
     for q in filtered_questions:
-        # 원본 questions 리스트에서의 실제 인덱스 (세션 키 일관성 유지)
         real_idx = questions.index(q)
 
         with st.container(border=True):
             is_graded = (st.session_state.quiz_phase == "review")
-            my_ans = st.session_state.get(f"ans_{real_idx}", "")
+            attempt_id = st.session_state.quiz_attempt
+            q_id = q["id"]
+            retry_id = st.session_state.get("retry_counts", {}).get(q_id, 0)
+            my_ans = st.session_state.get(f"ans_{real_idx}_{attempt_id}_{retry_id}", "")
 
-            # 백엔드 채점 결과 기반 is_correct
             if is_graded:
                 quiz_result = st.session_state.get("quiz_result", {})
                 results = {r["question_id"]: r for r in quiz_result.get("results", [])}
@@ -350,83 +345,61 @@ def show_quiz_screen():
                     st.info(f"✅ **정답:** &nbsp; {q['correct']}")
                 st.write("")
 
-            exp_col, fb_col = st.columns([12, 1])
+            # ────────────────────────────────────────
+            # ✨ [수정 완료] 해설 보기 우측 레이아웃 일렬 배치
+            # ────────────────────────────────────────
+            # 가로 영역을 [해설 박스: 9.3] : [피드백 버튼: 0.7] 비율로 나란히 쪼갭니다.
+            exp_col, fb_col = st.columns([11.3, 0.7])
+            
             with exp_col:
+                # 해설 버튼이 이 안에서만 열리고 닫히므로, 우측 깃발 버튼의 높이에 영향을 주지 않습니다.
                 with st.expander("해설 보기", expanded=is_graded):
                     st.write(q['exp'])
+                    
             with fb_col:
-                if st.button("🚩", key=f"btn_fb_{q['id']}_{st.session_state.quiz_phase}", help="문제 오류 신고 및 피드백 남기기"):
+                # 해설 보기 바로 우측에 딱 붙어서 1:1 높이 정렬을 이룹니다.
+                if st.button("🚩", key=f"btn_fb_{q['id']}_{st.session_state.quiz_phase}", help="문제 오류 신고 및 피드백 남기기", use_container_width=True):
                     show_feedback_dialog(q['id'], q)
 
     # ────────────────────────────────────────
-    # 하단 제출 버튼
+    # 하단 채점 버튼
     # ────────────────────────────────────────
     st.markdown("<hr>", unsafe_allow_html=True)
 
     if st.session_state.quiz_phase == "first_attempt":
         if st.button("채점", type="primary", use_container_width=True):
             answers = []
+            attempt_id = st.session_state.quiz_attempt
+            
             for idx, q in enumerate(questions):
-                submitted = st.session_state.get(f"ans_{idx}", "")
+                q_id = q["id"]
+                retry_id = st.session_state.get("retry_counts", {}).get(q_id, 0)
+                submitted = st.session_state.get(f"ans_{idx}_{attempt_id}_{retry_id}", "")
                 if submitted is None:
                     submitted = ""
                 if q["type"] == "객관식" and submitted:
                     submitted = submitted[0]
+                
                 answers.append({
                     "question_id": q["question_id"],
-                    "submitted_answer": str(submitted)
+                    "submitted_answer": submitted
                 })
 
             try:
                 response = requests.post(
-                    f"{BASE_URL}/question/submit",
+                    f"{BASE_URL}/question/grade",
                     json={
                         "user_id": user_id,
-                        "document_id": str(document_id),
-                        "quiz_group_id": str(st.session_state.get("quiz_group_id", "")),
-                        "attempt_phase": "first_attempt",
+                        "quiz_group_id": st.session_state.get("quiz_group_id"),
                         "answers": answers
-                    }
-                )
-                if response.status_code == 200:
-                    st.session_state.quiz_result = response.json()
-                    st.session_state.quiz_phase = "review"
-                    st.balloons()
-                    st.rerun()
-                else:
-                    st.error("채점 중 오류가 발생했습니다.")
-            except Exception as e:
-                st.error(f"서버 연결 오류: {e}")
-
-    elif st.session_state.quiz_phase == "retake":
-        if st.button("채점 (오답 노트 반영 X)", type="primary", use_container_width=True):
-            answers = []
-            for idx, q in enumerate(questions):
-                submitted = st.session_state.get(f"ans_{idx}", "")
-                if submitted is None:
-                    submitted = ""
-                if q["type"] == "객관식" and submitted:
-                    submitted = submitted[0]
-                answers.append({
-                    "question_id": q["question_id"],
-                    "submitted_answer": str(submitted)
-                })
-
-            try:
-                response = requests.post(
-                    f"{BASE_URL}/question/submit",
-                    json={
-                        "user_id": user_id,
-                        "document_id": str(document_id),
-                        "attempt_phase": "regenerated",
-                        "answers": answers
-                    }
+                    },
+                    timeout=30
                 )
                 if response.status_code == 200:
                     st.session_state.quiz_result = response.json()
                     st.session_state.quiz_phase = "review"
                     st.rerun()
                 else:
-                    st.error("채점 중 오류가 발생했습니다.")
+                    st.toast(f"채점 실패 (status: {response.status_code})", icon="❌")
             except Exception as e:
-                st.error(f"서버 연결 오류: {e}")
+                st.toast(f"서버 연결 오류: {e}", icon="❌")
