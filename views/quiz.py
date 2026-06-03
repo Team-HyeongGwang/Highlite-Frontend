@@ -251,18 +251,12 @@ def show_quiz_screen():
     # ────────────────────────────────────────
     # 상단 헤더 및 버튼
     # ────────────────────────────────────────
-    btn_left, btn_space, btn_right = st.columns([2.5, 5, 2.5])
-    with btn_left:
-        if st.button("← 라이브러리로 돌아가기", use_container_width=True):
-            st.session_state.current_menu = "문서 라이브러리"
-            st.session_state.current_page = "문서 라이브러리"
-            st.rerun()
-            
-    with btn_right:
-        if st.session_state.quiz_phase == "review":
+    if st.session_state.quiz_phase == "review":
+        btn_space, btn_right = st.columns([7.5, 2.5])
+        with btn_right:
             if st.button("다시 풀기 ↻", type="primary", use_container_width=True):
                 st.session_state.quiz_attempt += 1
-                st.session_state.quiz_phase = "first_attempt"  # retake 대신 상태 초기화 풀이 진입
+                st.session_state.quiz_phase = "first_attempt"
                 st.rerun()
 
     # ────────────────────────────────────────
@@ -346,12 +340,20 @@ def show_quiz_screen():
                     st.info(f"✅ **정답:** &nbsp; {q['correct']}")
                 st.write("")
 
-            exp_col, fb_col = st.columns([12, 1])
+            # ────────────────────────────────────────
+            # ✨ [수정 완료] 해설 보기 우측 레이아웃 일렬 배치
+            # ────────────────────────────────────────
+            # 가로 영역을 [해설 박스: 9.3] : [피드백 버튼: 0.7] 비율로 나란히 쪼갭니다.
+            exp_col, fb_col = st.columns([11.3, 0.7])
+            
             with exp_col:
+                # 해설 버튼이 이 안에서만 열리고 닫히므로, 우측 깃발 버튼의 높이에 영향을 주지 않습니다.
                 with st.expander("해설 보기", expanded=is_graded):
                     st.write(q['exp'])
+                    
             with fb_col:
-                if st.button("🚩", key=f"btn_fb_{q['id']}_{st.session_state.quiz_phase}", help="문제 오류 신고 및 피드백 남기기"):
+                # 해설 보기 바로 우측에 딱 붙어서 1:1 높이 정렬을 이룹니다.
+                if st.button("🚩", key=f"btn_fb_{q['id']}_{st.session_state.quiz_phase}", help="문제 오류 신고 및 피드백 남기기", use_container_width=True):
                     show_feedback_dialog(q['id'], q)
 
     # ────────────────────────────────────────
@@ -371,7 +373,7 @@ def show_quiz_screen():
                 if submitted is None:
                     submitted = ""
                 if q["type"] == "객관식" and submitted:
-                    submitted = submitted[0]  # 문항 인덱스 추출 등 처리 기입 필요부
+                    submitted = submitted[0]
                 
                 answers.append({
                     "question_id": q["question_id"],
