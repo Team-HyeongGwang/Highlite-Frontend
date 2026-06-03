@@ -103,8 +103,11 @@ def show_feedback_dialog(q_id, q):
                         st.session_state.questions[i]["answer"] = new_q["answer"]
                         st.session_state.questions[i]["explanation"] = new_q["explanation"]
 
-                        if f"ans_{i}" in st.session_state:
-                            del st.session_state[f"ans_{i}"]
+                        # 해당 문제 답안 세션 초기화 (현재 시도 차수의 키값 제거)
+                        attempt_id = st.session_state.get("quiz_attempt", 0)
+                        for k in [f"ans_{i}_{attempt_id}", f"widget_ans_{i}_{attempt_id}"]:
+                            if k in st.session_state:
+                                del st.session_state[k]
 
                         if "quiz_result" in st.session_state:
                             results = st.session_state.quiz_result.get("results", [])
@@ -128,10 +131,13 @@ def show_feedback_dialog(q_id, q):
             st.toast(f"서버 연결 오류: {e}", icon="❌")
 
 # ────────────────────────────────────────
-# 문제 유형별 렌더링
+# 문제 유형별 입력 렌더링 (시도 차수 고유 키 적용)
 # ────────────────────────────────────────
 def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
-    key = f"{prefix}_{idx}"
+    # 시도 차수(attempt_id)를 키에 조합하여 다시 풀기 시 완벽한 초기화 보장
+    attempt_id = st.session_state.get("quiz_attempt", 0)
+    key = f"{prefix}_{idx}_{attempt_id}"
+    widget_key = f"widget_{prefix}_{idx}_{attempt_id}"
 
     if key not in st.session_state:
         st.session_state[key] = prefill_ans
@@ -149,14 +155,17 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
         except Exception:
             selected_index = None
 
-        return st.radio(
+        selected = st.radio(
             "보기",
             options=options,
-            key=key,
+            key=widget_key,
             index=selected_index,
             label_visibility="collapsed",
             disabled=is_disabled
         )
+        if selected is not None:
+            st.session_state[key] = selected
+        return selected
 
     elif q['type'] == "OX":
         col1, col2 = st.columns(2)
@@ -173,28 +182,29 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
         return st.session_state.get(key)
 
     elif q['type'] == "빈칸채우기":
-            if prefill_ans and key not in st.session_state:
-                st.session_state[key] = prefill_ans
-
-            return st.text_input(
-                "정답 입력",
-                key=key,
-                placeholder="정답을 입력하세요",
-                label_visibility="collapsed",
-                disabled=is_disabled
-            )
+        val = st.text_input(
+            "정답 입력",
+            key=widget_key,
+            value=st.session_state.get(key, ""),
+            placeholder="정답을 입력하세요",
+            label_visibility="collapsed",
+            disabled=is_disabled
+        )
+        if val:
+            st.session_state[key] = val
+        return val
 
 # ────────────────────────────────────────
 # 메인 화면
 # ────────────────────────────────────────
 def show_quiz_screen():
-    # 로그인된 user_id 세션에서 가져오기
+
+    # ── 로그인 및 세션 확인 ──
     user_id = st.session_state.get("user_info", {}).get("user_id")
     if not user_id:
         st.warning("로그인이 필요합니다.")
         return
 
-    # document_id 세션에서 가져오기
     document_id = st.session_state.get("document_id")
     if not document_id:
         st.warning("문서 정보가 없습니다. 업로드 화면에서 문제를 먼저 생성해주세요.")
@@ -204,32 +214,34 @@ def show_quiz_screen():
         st.warning("생성된 문제가 없습니다. 업로드 화면에서 문제를 먼저 생성해주세요.")
         return
 
-    # 백엔드 응답 → 프론트 형식 변환
-    questions = [
-        convert_question(q, idx)
-        for idx, q in enumerate(st.session_state.questions)
-    ]
-    
-    # ← 추가: review 모드일 때 quiz_result에서 답안 세션에 채우기
-    if st.session_state.quiz_phase == "review":
-        quiz_result = st.session_state.get("quiz_result", {})
-        results = {r["question_id"]: r for r in quiz_result.get("results", [])}
-        for idx, q in enumerate(questions):
-            ans_key = f"ans_{idx}"
-            if ans_key not in st.session_state or not st.session_state.get(ans_key):
-                result = results.get(q["question_id"], {})
-                submitted = result.get("submitted_answer", "")
-                if submitted:
-                    st.session_state[ans_key] = submitted
-    
-    
+    # ── 필수 세션 상태 초기화 ──
     if 'quiz_phase' not in st.session_state:
         st.session_state.quiz_phase = "first_attempt"
     if 'retry_counts' not in st.session_state:
         st.session_state.retry_counts = {}
+    if 'quiz_attempt' not in st.session_state:
+        st.session_state.quiz_attempt = 0
+
+    # ── 백엔드 응답 → 프론트 형식 변환 ──
+    questions = [
+        convert_question(q, idx)
+        for idx, q in enumerate(st.session_state.questions)
+    ]
+
+    # ── review 모드: quiz_result에서 답안 세션에 복원 ──
+    if st.session_state.get("quiz_phase") == "review":
+        quiz_result = st.session_state.get("quiz_result", {})
+        results = {r["question_id"]: r for r in quiz_result.get("results", [])}
+        attempt_id = st.session_state.quiz_attempt
+        for idx, q in enumerate(questions):
+            ans_key = f"ans_{idx}_{attempt_id}"
+            if not st.session_state.get(ans_key):
+                result = results.get(q["question_id"], {})
+                submitted = result.get("submitted_answer", "")
+                if submitted:
+                    st.session_state[ans_key] = submitted
 
     num_q = len(questions)
-
     correct_count = 0
     score_percent = 0
     if st.session_state.quiz_phase == "review":
@@ -238,38 +250,24 @@ def show_quiz_screen():
         score_percent = int((correct_count / num_q) * 100) if num_q > 0 else 0
 
     # ────────────────────────────────────────
-    # 상단 헤더
+    # 상단 헤더: 목록으로 돌아가기 + 다시 풀기
     # ────────────────────────────────────────
-    # 목록 돌아가기 + 다시 풀기 버튼 같은 행에 배치
-    if st.session_state.get("current_page") == "quiz":
-        btn_left, btn_space, btn_right = st.columns([2, 6, 2.5])
-        with btn_left:
-            if st.button("← 목록으로 돌아가기"):
-                st.session_state.current_page = None
-                st.session_state.current_menu = "문서 라이브러리"
+    btn_left, btn_space, btn_right = st.columns([2, 6, 2.5])
+    with btn_left:
+        if st.button("← 라이브러리로 돌아가기"):
+            st.session_state.current_page = None
+            st.session_state.current_menu = "문서 라이브러리"
+            st.rerun()
+    with btn_right:
+        if st.session_state.quiz_phase == "review":
+            if st.button("다시 풀기 ↻", type="primary", use_container_width=True):
+                # 차수 카운트를 올림으로써 기존 위젯 캐시를 완전히 날려버림
+                st.session_state.quiz_attempt += 1
+                st.session_state.quiz_phase = "retake"
                 st.rerun()
-        with btn_right:
-            if st.session_state.quiz_phase == "review":
-                if st.button("다시 풀기 ↻", type="primary", use_container_width=True):
-                    for key in list(st.session_state.keys()):
-                        if key.startswith("ans_") or key.startswith("retry_"):
-                            del st.session_state[key]
-                    st.session_state.quiz_phase = "retake"
-                    st.rerun()
-    else:
-        # 라이브러리 외부(업로드 등)에서 진입 시 다시 풀기만 표시
-        _, btn_right = st.columns([9.5, 2.5])
-        with btn_right:
-            if st.session_state.quiz_phase == "review":
-                if st.button("다시 풀기 ↻", type="primary", use_container_width=True):
-                    for key in list(st.session_state.keys()):
-                        if key.startswith("ans_") or key.startswith("retry_"):
-                            del st.session_state[key]
-                    st.session_state.quiz_phase = "retake"
-                    st.rerun()
-    
+
     # ────────────────────────────────────────
-    # 필터 (핵심/중요/참고 → R/O/Y 매핑)
+    # 중요도 필터
     # ────────────────────────────────────────
     filter_choice = st.radio(
         "필터",
@@ -277,9 +275,8 @@ def show_quiz_screen():
         horizontal=True,
         label_visibility="collapsed"
     )
-    st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True) # 구분선 추가
+    st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
 
-    # 필터 적용
     filter_map = {"전체": None, "핵심": "R", "중요": "O", "참고": "Y"}
     filter_imp = filter_map[filter_choice]
     filtered_questions = questions if not filter_imp else [q for q in questions if q['imp'] == filter_imp]
@@ -295,14 +292,14 @@ def show_quiz_screen():
     # 문제 렌더링
     # ────────────────────────────────────────
     for q in filtered_questions:
-        # 원본 questions 리스트에서의 실제 인덱스 (세션 키 일관성 유지)
-        real_idx = questions.index(q)
+        real_idx = questions.index(q)  # 세션 키 일관성 유지를 위해 원본 인덱스 사용
 
         with st.container(border=True):
             is_graded = (st.session_state.quiz_phase == "review")
-            my_ans = st.session_state.get(f"ans_{real_idx}", "")
+            attempt_id = st.session_state.quiz_attempt
+            my_ans = st.session_state.get(f"ans_{real_idx}_{attempt_id}", "")
 
-            # 백엔드 채점 결과 기반 is_correct
+            # 채점 결과 기반 정오 판별
             if is_graded:
                 quiz_result = st.session_state.get("quiz_result", {})
                 results = {r["question_id"]: r for r in quiz_result.get("results", [])}
@@ -315,6 +312,7 @@ def show_quiz_screen():
             if is_graded:
                 mark = "<span style='color: #28A745; font-size: 17px;'>⭕</span> " if is_correct else "<span style='color: #FF4B4B; font-size: 17px;'>❌</span> "
 
+            # 문제 헤더: 번호 + 중요도 태그 + 출처
             c1, c2 = st.columns([7, 3])
             with c1:
                 imp_map = {"R": "r", "O": "o", "Y": "y"}
@@ -330,14 +328,17 @@ def show_quiz_screen():
                     unsafe_allow_html=True
                 )
 
+            # 문제 텍스트
             st.markdown(
                 f"<div style='margin-top: 15px; margin-bottom: 15px; font-size: 16px; color: var(--text-color);'>{q['text']}</div>",
                 unsafe_allow_html=True
             )
 
+            # 답안 입력 (세션/위젯 키 분리 및 고유 차수 적용)
             render_question_input(q, real_idx, prefix="ans", is_disabled=is_graded)
             st.write("")
 
+            # 채점 결과 표시
             if is_graded:
                 ans_col1, ans_col2 = st.columns(2)
                 with ans_col1:
@@ -349,6 +350,7 @@ def show_quiz_screen():
                     st.info(f"✅ **정답:** &nbsp; {q['correct']}")
                 st.write("")
 
+            # 해설 + 피드백 버튼
             exp_col, fb_col = st.columns([12, 1])
             with exp_col:
                 with st.expander("해설 보기", expanded=is_graded):
@@ -358,15 +360,17 @@ def show_quiz_screen():
                     show_feedback_dialog(q['id'], q)
 
     # ────────────────────────────────────────
-    # 하단 제출 버튼
+    # 하단 채점 버튼
     # ────────────────────────────────────────
     st.markdown("<hr>", unsafe_allow_html=True)
 
+    # ── 첫 시도 채점 ──
     if st.session_state.quiz_phase == "first_attempt":
         if st.button("채점", type="primary", use_container_width=True):
             answers = []
+            attempt_id = st.session_state.quiz_attempt
             for idx, q in enumerate(questions):
-                submitted = st.session_state.get(f"ans_{idx}", "")
+                submitted = st.session_state.get(f"ans_{idx}_{attempt_id}", "")
                 if submitted is None:
                     submitted = ""
                 if q["type"] == "객관식" and submitted:
@@ -397,11 +401,13 @@ def show_quiz_screen():
             except Exception as e:
                 st.error(f"서버 연결 오류: {e}")
 
+    # ── 다시 풀기 채점 (오답 노트 미반영) ──
     elif st.session_state.quiz_phase == "retake":
         if st.button("채점 (오답 노트 반영 X)", type="primary", use_container_width=True):
             answers = []
+            attempt_id = st.session_state.quiz_attempt
             for idx, q in enumerate(questions):
-                submitted = st.session_state.get(f"ans_{idx}", "")
+                submitted = st.session_state.get(f"ans_{idx}_{attempt_id}", "")
                 if submitted is None:
                     submitted = ""
                 if q["type"] == "객관식" and submitted:
