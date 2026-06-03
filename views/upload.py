@@ -32,6 +32,37 @@ def show_upload_screen():
         .rank-badge { background-color: #F1F3F5; color: #495057; border: 1px solid #DEE2E6; width: 22px; height: 22px; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 12px; font-weight: 800; margin-right: 8px; }
         .rank-text { font-size: 14px; font-weight: 700; color: #343A40; }
         hr { margin: 30px 0 !important; border-color: rgba(151,151,151,0.2) !important; }
+        .empty-state-box {
+            border: 2px dashed #E9ECEF;
+            border-radius: 10px;
+            padding: 24px 16px;
+            text-align: center;
+            background-color: #F8F9FA;
+            margin-top: 10px;
+            transition: all 0.2s ease-in-out;
+        }
+        .empty-state-box:hover {
+            border-color: #CED4DA;
+            background-color: #F1F3F5;
+        }
+        .empty-state-icon {
+            font-size: 26px;
+            margin-bottom: 8px;
+            opacity: 0.8;
+        }
+        .empty-state-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: #495057;
+            margin-bottom: 6px;
+            letter-spacing: -0.5px;
+        }
+        .empty-state-desc {
+            font-size: 13px;
+            color: #868E96;
+            line-height: 1.4;
+            word-break: keep-all;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -101,30 +132,49 @@ def show_upload_screen():
         with h_col2: st.button("➕", key="up_add_hl", on_click=add_rank_upload, args=('hl',), use_container_width=True)
         with h_col3: st.button("➖", key="up_rem_hl", on_click=remove_rank_upload, args=('hl',), use_container_width=True)
 
-        for i in range(len(st.session_state.up_hl_ranks)):
-            label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
-            st.markdown(f"<div class='rank-label-container'><div class='rank-badge'>{i+1}</div><div class='rank-text'>{label}</div></div>", unsafe_allow_html=True)
-            st.session_state.up_hl_ranks[i] = st.selectbox(
-                f"형광펜 {i+1}순위", color_options,
-                index=color_options.index(st.session_state.up_hl_ranks[i]),
-                key=f"up_hl_{i}", label_visibility="collapsed"
-            )
-
+        if not st.session_state.up_hl_ranks:
+            st.markdown("""
+            <div class='empty-state-box'>
+                <div class='empty-state-icon'>🖍️</div>
+                <div class='empty-state-title'>순위 미지정</div>
+                <div class='empty-state-desc'>형광펜 색상에 따른<br>추가 가중치가 부여되지 않습니다.</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            for i in range(len(st.session_state.up_hl_ranks)):
+                label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
+                st.markdown(f"<div class='rank-label-container'><div class='rank-badge'>{i+1}</div><div class='rank-text'>{label}</div></div>", unsafe_allow_html=True)
+                st.session_state.up_hl_ranks[i] = st.selectbox(
+                    f"형광펜 {i+1}순위", color_options,
+                    index=color_options.index(st.session_state.up_hl_ranks[i]),
+                    key=f"up_hl_{i}", label_visibility="collapsed"
+                )
+            
+    # [필기펜 설정]
     with col_pen_ui:
         p_col1, p_col2, p_col3 = st.columns([3, 1, 1])
         with p_col1: st.write("**필기펜** 순위")
         with p_col2: st.button("➕", key="up_add_pen", on_click=add_rank_upload, args=('pen',), use_container_width=True)
         with p_col3: st.button("➖", key="up_rem_pen", on_click=remove_rank_upload, args=('pen',), use_container_width=True)
 
-        for i in range(len(st.session_state.up_pen_ranks)):
-            label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
-            st.markdown(f"<div class='rank-label-container'><div class='rank-badge'>{i+1}</div><div class='rank-text'>{label}</div></div>", unsafe_allow_html=True)
-            st.session_state.up_pen_ranks[i] = st.selectbox(
-                f"필기펜 {i+1}순위", color_options,
-                index=color_options.index(st.session_state.up_pen_ranks[i]),
-                key=f"up_pen_{i}", label_visibility="collapsed"
-            )
-
+        if not st.session_state.up_pen_ranks:
+            st.markdown("""
+            <div class='empty-state-box'>
+                <div class='empty-state-icon'>🖍️</div>
+                <div class='empty-state-title'>순위 미지정</div>
+                <div class='empty-state-desc'>필기 내용은 가중치 점수 없이<br>텍스트 맥락 파악 용도로만 AI가 참고합니다.</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            for i in range(len(st.session_state.up_pen_ranks)):
+                label = "핵심" if i == 0 else "중요" if i == 1 else "참고"
+                st.markdown(f"<div class='rank-label-container'><div class='rank-badge'>{i+1}</div><div class='rank-text'>{label}</div></div>", unsafe_allow_html=True)
+                st.session_state.up_pen_ranks[i] = st.selectbox(
+                    f"필기펜 {i+1}순위", color_options,
+                    index=color_options.index(st.session_state.up_pen_ranks[i]),
+                    key=f"up_pen_{i}", label_visibility="collapsed"
+                ) 
+            
     st.markdown("<div style='margin-top: 40px;'></div>", unsafe_allow_html=True)
 
     # ──────────────────────────────────────────
