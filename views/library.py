@@ -4,6 +4,9 @@ import requests
 BASE_URL = "http://127.0.0.1:8000"
 
 def show_library_screen():
+    # ──────────────────────────────────────────
+    # 헤더
+    # ──────────────────────────────────────────
     col_title, col_search = st.columns([5.5, 2])
     with col_title:
         st.markdown("### 문서 라이브러리 &nbsp; <span style='font-size: 14px; font-weight: normal; color: #888;'>각 문서에서 문제 풀이 · 오답 보기 · 재생성을 할 수 있습니다</span>", unsafe_allow_html=True)
@@ -12,11 +15,17 @@ def show_library_screen():
 
     st.write("")
 
+    # ──────────────────────────────────────────
+    # 로그인 확인
+    # ──────────────────────────────────────────
     user_id = st.session_state.get("user_info", {}).get("user_id")
     if not user_id:
         st.warning("로그인이 필요합니다.")
         return
 
+    # ──────────────────────────────────────────
+    # API에서 문서 목록 가져오기
+    # ──────────────────────────────────────────
     try:
         response = requests.get(
             f"{BASE_URL}/question/list",
@@ -30,6 +39,7 @@ def show_library_screen():
     except Exception:
         api_documents = []
 
+    # API 데이터 → 프론트 형식 변환
     grouped_files = []
     for doc in api_documents:
         attempts = []
@@ -47,13 +57,14 @@ def show_library_screen():
         grouped_files.append({
             "id": str(doc["document_id"]),
             "document_id": doc["document_id"],
-            "group_id": doc.get("group_id"),  # ← 추가
+            "group_id": doc.get("group_id"),
             "title": doc["title"],
             "upload_date": doc["upload_date"][:16].replace("T", " "),
             "total_count": doc["total_count"],
             "attempts": attempts,
         })
 
+    # 문서가 없을 때 빈 화면
     if len(grouped_files) == 0:
         st.write("")
         st.markdown("<h1 style='font-size: 48px; margin-bottom: 10px;'>📂</h1>", unsafe_allow_html=True)
@@ -61,6 +72,9 @@ def show_library_screen():
         st.markdown("<p style='color: #888; font-size: 15px;'>왼쪽 메뉴의 <b style='color: #FF4B4B;'>[업로드]</b> 탭으로 이동해서<br>첫 번째 교재를 올리고 나만의 문제를 만들어보세요!</p>", unsafe_allow_html=True)
         return
 
+    # ──────────────────────────────────────────
+    # 회차 선택 및 일괄 삭제
+    # ──────────────────────────────────────────
     selected_attempts = []
     for file in grouped_files:
         for attempt in file['attempts']:
@@ -76,8 +90,6 @@ def show_library_screen():
         c1, c2 = st.columns(2)
         if c1.button("취소", use_container_width=True): st.rerun()
         if c2.button("확인", type="primary", use_container_width=True):
-
-            # ← quiz_group_id 수집
             quiz_group_ids = []
             quiz_result_ids = []
             for f_id, a_id in selected_attempts:
@@ -97,7 +109,7 @@ def show_library_screen():
                         json={
                             "user_id": user_id,
                             "quiz_result_ids": quiz_result_ids,
-                            "quiz_group_ids": quiz_group_ids,  # ← 추가
+                            "quiz_group_ids": quiz_group_ids,
                         },
                         timeout=30
                     )
@@ -128,17 +140,73 @@ def show_library_screen():
 
     st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
 
+    # ──────────────────────────────────────────
+    # 문서 폴더 목록 렌더링
+    # ──────────────────────────────────────────
     for file in grouped_files:
         col_folder_title, col_regen = st.columns([8, 2])
 
+        # ── 폴더 제목 (수정 기능 포함) ──
         with col_folder_title:
             st.write("")
-            st.markdown(f"**📁 {file['title']}** 　<span style='color:#888; font-size:14px;'>(총 {file['total_count']}회 생성 · 업로드: {file['upload_date']})</span>", unsafe_allow_html=True)
 
+            edit_key = f"edit_title_{file['id']}"
+            editing_key = f"editing_{file['id']}"
+
+            if st.session_state.get(editing_key):
+                # 제목 수정 모드
+                col_input, col_save, col_cancel = st.columns([5, 1, 1])
+                with col_input:
+                    new_title = st.text_input(
+                        "제목 수정",
+                        value=st.session_state.get(edit_key, file['title']),
+                        key=f"input_title_{file['id']}",
+                        label_visibility="collapsed"
+                    )
+                with col_save:
+                    if st.button("✔", key=f"save_title_{file['id']}", use_container_width=True):
+                        if new_title.strip():
+                            try:
+                                res = requests.patch(
+                                    f"{BASE_URL}/question/document-title",
+                                    json={
+                                        "group_id": str(file.get("group_id")),
+                                        "title": new_title.strip(),
+                                        "user_id": user_id,
+                                    },
+                                    timeout=10
+                                )
+                                if res.status_code == 200:
+                                    st.toast("제목이 수정되었습니다.", icon="✅")
+                                    st.session_state[editing_key] = False
+                                    st.rerun()
+                                else:
+                                    st.toast("수정 실패", icon="❌")
+                            except Exception as e:
+                                st.toast(f"오류: {e}", icon="❌")
+                with col_cancel:
+                    if st.button("✕", key=f"cancel_title_{file['id']}", use_container_width=True):
+                        st.session_state[editing_key] = False
+                        st.rerun()
+            else:
+                # 제목 일반 표시 모드
+                col_text, col_edit = st.columns([9, 1])
+                with col_text:
+                    st.markdown(
+                        f"**📁 {file['title']}** 　<span style='color:#888; font-size:14px;'>(총 {file['total_count']}회 생성 · 업로드: {file['upload_date']})</span>",
+                        unsafe_allow_html=True
+                    )
+                with col_edit:
+                    if st.button("✏️", key=f"edit_btn_{file['id']}", help="제목 수정"):
+                        st.session_state[editing_key] = True
+                        st.session_state[edit_key] = file['title']
+                        st.rerun()
+
+        # ── 문제 재생성 버튼 ──
         with col_regen:
             if st.button("🔄 문제 재생성", key=f"btn_regen_doc_{file['id']}", type="primary", use_container_width=True):
                 doc_id = str(file.get("document_id"))
-                group_id = file.get("group_id")  # ← 세션 대신 file에서 가져오기
+                group_id = file.get("group_id")
 
                 if not doc_id or not group_id:
                     st.toast("문서 정보가 없습니다.", icon="⚠️")
@@ -173,6 +241,7 @@ def show_library_screen():
                     except Exception as e:
                         st.toast(f"서버 연결 오류: {e}", icon="❌")
 
+        # ── 회차별 문제 목록 ──
         with st.expander("생성된 문제 목록", expanded=True):
             inner_cols = st.columns([0.5, 2, 2.5, 2, 3])
             with inner_cols[0]: st.write("")
@@ -203,6 +272,7 @@ def show_library_screen():
                         with c_score:
                             st.markdown(f"<span style='color: {score_color}; font-weight: 800; line-height: 2.2;'>{attempt['score']}</span>", unsafe_allow_html=True)
 
+                        # ── 문제 버튼: 해당 회차 문제 + 채점 결과 불러오기 ──
                         with c_q:
                             if st.button("문제", key=f"btn_q_{attempt['id']}", use_container_width=True):
                                 quiz_group_id = attempt.get("quiz_group_id")
@@ -249,6 +319,7 @@ def show_library_screen():
                                     except Exception as e:
                                         st.toast(f"서버 연결 오류: {e}", icon="❌")
 
+                        # ── 오답 버튼: 해당 회차 오답 노트로 이동 ──
                         with c_w:
                             if st.button("오답", key=f"btn_w_{attempt['id']}", use_container_width=True):
                                 if attempt['score'] == "-":
@@ -260,7 +331,7 @@ def show_library_screen():
                                         st.session_state.selected_quiz_result_id = attempt["quiz_result_id"]
                                         st.session_state.review_doc_title = file["title"]
                                         st.session_state.review_doc_round = attempt["round"]
-                                        st.session_state.review_from = "library"  # ← 진입 경로 저장
+                                        st.session_state.review_from = "library"
                                         st.session_state.current_page = "review"
                                         st.rerun()
                                     else:

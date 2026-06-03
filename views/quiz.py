@@ -140,10 +140,10 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
         options = q.get('options', [])
         current_val = st.session_state.get(key)
 
-        # 현재 세션값과 일치하는 옵션 인덱스 찾기
         try:
             selected_index = next(
-                (i for i, opt in enumerate(options) if current_val and opt.startswith(current_val)),
+                (i for i, opt in enumerate(options)
+                 if current_val and (opt == current_val or opt.startswith(current_val))),
                 None
             )
         except Exception:
@@ -173,17 +173,16 @@ def render_question_input(q, idx, prefix, is_disabled=False, prefill_ans=None):
         return st.session_state.get(key)
 
     elif q['type'] == "빈칸채우기":
-        # prefill_ans가 있으면 세션에 미리 채워줌 (review 모드에서 이전 답 표시)
-        if prefill_ans and key not in st.session_state:
-            st.session_state[key] = prefill_ans
+            if prefill_ans and key not in st.session_state:
+                st.session_state[key] = prefill_ans
 
-        return st.text_input(
-            "정답 입력",
-            key=key,
-            placeholder="정답을 입력하세요",
-            label_visibility="collapsed",
-            disabled=is_disabled
-        )
+            return st.text_input(
+                "정답 입력",
+                key=key,
+                placeholder="정답을 입력하세요",
+                label_visibility="collapsed",
+                disabled=is_disabled
+            )
 
 # ────────────────────────────────────────
 # 메인 화면
