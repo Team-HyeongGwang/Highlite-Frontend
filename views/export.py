@@ -47,7 +47,8 @@ def show_export_screen():
                 ["전체", "핵심만", "중요만", "오답만"],
                 horizontal=True,
                 label_visibility="collapsed",
-                key="export_filter"
+                key="export_filter",
+                disabled=st.session_state.get("export_content", "문제 + 해설") == "요약본",
             )
             st.write("")
 
