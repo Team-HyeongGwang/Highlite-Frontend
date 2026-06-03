@@ -83,11 +83,13 @@ def show_export_screen():
                 selected_group_id = d["group_id"]
                 break
 
-    # 캐시 키: group_id + content 타입 (format 무관 — 합성 텍스트는 포맷 상관없이 동일)
-    preview_key = f"{selected_group_id}_{export_content}"
-    export_key  = f"{selected_group_id}_{export_format}_{export_content}"
+    # 요약본은 필터 무관, 문제+해설만 필터 적용
+    export_filter = st.session_state.get("export_filter", "전체")
+    effective_filter = export_filter if export_content == "문제 + 해설" else "전체"
 
-    # 선택이 바뀌면 다운로드 캐시 초기화 (미리보기 캐시는 유지)
+    preview_key = f"{selected_group_id}_{export_content}_{effective_filter}"
+    export_key  = f"{selected_group_id}_{export_format}_{export_content}_{effective_filter}"
+
     if st.session_state.get("export_key") != export_key:
         st.session_state.pop("export_ready", None)
         st.session_state.pop("export_filename", None)
@@ -124,11 +126,12 @@ def show_export_screen():
                     _do_export(
                         export_content, fmt, selected_group_id,
                         selected_file_title, export_key, preview_key,
+                        effective_filter, user_id,
                     )
 
     # 미리보기 버튼 처리
     if preview_clicked:
-        _do_preview(export_content, selected_group_id, preview_key)
+        _do_preview(export_content, selected_group_id, preview_key, effective_filter, user_id)
 
     # 미리보기 결과 표시
     cached_preview = st.session_state.get("preview_content")
@@ -138,9 +141,9 @@ def show_export_screen():
             st.markdown(cached_preview)
 
 
-def _do_preview(export_content: str, group_id: str, preview_key: str):
+def _do_preview(export_content: str, group_id: str, preview_key: str,
+                export_filter: str = "전체", user_id: int = None):
     """미리보기: MD 포맷으로 한 번 가져와서 session state에 캐시."""
-    # 이미 같은 키로 캐시된 경우 스킵
     if st.session_state.get("preview_key") == preview_key and "preview_content" in st.session_state:
         return
 
@@ -153,11 +156,12 @@ def _do_preview(export_content: str, group_id: str, preview_key: str):
 
     with st.spinner(spinner_msg):
         try:
-            resp = requests.get(
-                endpoint,
-                params={"group_id": group_id, "format": "md"},
-                timeout=60,
-            )
+            params = {"group_id": group_id, "format": "md"}
+            if export_content == "문제 + 해설":
+                params["filter"] = export_filter
+                if export_filter == "오답만" and user_id:
+                    params["user_id"] = user_id
+            resp = requests.get(endpoint, params=params, timeout=60)
             if resp.status_code == 200:
                 md_text = resp.content.decode("utf-8")
                 st.session_state.preview_content = md_text
@@ -179,6 +183,7 @@ def _do_preview(export_content: str, group_id: str, preview_key: str):
 def _do_export(
     export_content: str, fmt: str, group_id: str,
     file_title: str, export_key: str, preview_key: str,
+    export_filter: str = "전체", user_id: int = None,
 ):
     """내보내기: 가능하면 캐시 재사용, 없으면 API 호출."""
     cached_key = st.session_state.get("preview_key")
@@ -237,11 +242,12 @@ def _do_export(
 
     with st.spinner(spinner_msg):
         try:
-            resp = requests.get(
-                endpoint,
-                params={"group_id": group_id, "format": fmt},
-                timeout=60,
-            )
+            params = {"group_id": group_id, "format": fmt}
+            if export_content == "문제 + 해설":
+                params["filter"] = export_filter
+                if export_filter == "오답만" and user_id:
+                    params["user_id"] = user_id
+            resp = requests.get(endpoint, params=params, timeout=60)
             if resp.status_code == 200:
                 filename = f"{file_title.replace('.pdf', '')}_{filename_suf}.{fmt}"
                 mime     = "application/pdf" if fmt == "pdf" else "text/markdown"
