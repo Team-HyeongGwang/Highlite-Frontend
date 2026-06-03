@@ -251,12 +251,17 @@ def show_quiz_screen():
     # ────────────────────────────────────────
     # 상단 헤더 및 버튼
     # ────────────────────────────────────────
-    if st.session_state.quiz_phase == "review":
-        btn_space, btn_right = st.columns([7.5, 2.5])
-        with btn_right:
+    btn_left, btn_space, btn_right = st.columns([2, 6, 2.5])
+    with btn_left:
+        if st.button("← 라이브러리로 돌아가기"):
+            st.session_state.current_page = None
+            st.session_state.current_menu = "문서 라이브러리"
+            st.rerun()
+    with btn_right:
+        if st.session_state.quiz_phase == "review":
             if st.button("다시 풀기 ↻", type="primary", use_container_width=True):
                 st.session_state.quiz_attempt += 1
-                st.session_state.quiz_phase = "first_attempt"
+                st.session_state.quiz_phase = "retake"
                 st.rerun()
 
     # ────────────────────────────────────────
