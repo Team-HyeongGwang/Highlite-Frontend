@@ -387,10 +387,12 @@ def show_quiz_screen():
 
             try:
                 response = requests.post(
-                    f"{BASE_URL}/question/grade",
+                    f"{BASE_URL}/question/submit",
                     json={
                         "user_id": user_id,
-                        "quiz_group_id": st.session_state.get("quiz_group_id"),
+                        "document_id": str(st.session_state.get("document_id", "")),
+                        "quiz_group_id": str(st.session_state.get("quiz_group_id", "")),
+                        "attempt_phase": "first_attempt",
                         "answers": answers
                     },
                     timeout=30
