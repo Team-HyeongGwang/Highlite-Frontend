@@ -10,8 +10,12 @@ def show_library_screen():
     col_title, col_search = st.columns([5.5, 2])
     with col_title:
         st.markdown("### 문서 라이브러리 &nbsp; <span style='font-size: 14px; font-weight: normal; color: #888;'>각 문서에서 문제 풀이 · 오답 보기 · 재생성을 할 수 있습니다</span>", unsafe_allow_html=True)
-    with col_search:
-        st.text_input("검색", placeholder="🔍 검색...", label_visibility="collapsed")
+    with col_search:st.text_input(
+        "검색", 
+        placeholder="🔍 검색...", 
+        label_visibility="collapsed",
+        key="library_search"
+        )        
 
     st.write("")
 
@@ -66,6 +70,14 @@ def show_library_screen():
 
     # 문서 순서 고정: document_id 기준 정렬
     grouped_files = sorted(grouped_files, key=lambda x: x["id"])
+    
+    # 검색 필터링 추가
+    search_query = st.session_state.get("library_search", "").strip()
+    if search_query:
+        grouped_files = [
+            f for f in grouped_files
+            if search_query.lower() in f["title"].lower()
+        ]
 
     # 문서가 없을 때 빈 화면
     if len(grouped_files) == 0:
