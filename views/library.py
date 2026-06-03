@@ -71,6 +71,9 @@ def show_library_screen():
     # 문서 순서 고정: document_id 기준 정렬
     grouped_files = sorted(grouped_files, key=lambda x: x["id"])
     
+    # attempts 없는 빈 폴더 숨김
+    grouped_files = [f for f in grouped_files if f["total_count"] > 0]
+
     # 검색 필터링 추가
     search_query = st.session_state.get("library_search", "").strip()
     if search_query:
@@ -242,11 +245,8 @@ def show_library_screen():
                                 st.session_state.quiz_phase = "first_attempt"
                                 st.session_state.quiz_result = {}
                                 st.session_state.retry_counts = {}
-                                st.session_state.quiz_attempt = 0 
-                                st.session_state.quiz_entry_point = "direct" # 직통 풀이 모드 명시
-                                
+                                st.session_state.quiz_attempt = 0
                                 st.toast("문제 재생성이 완료되었습니다!", icon="✅")
-                                st.session_state.current_page = "quiz"
                                 st.rerun()
                             else:
                                 st.toast("생성된 문제가 없습니다.", icon="⚠️")
