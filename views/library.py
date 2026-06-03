@@ -9,7 +9,7 @@ def show_library_screen():
     # ──────────────────────────────────────────
     col_title, col_search = st.columns([5.5, 2])
     with col_title:
-        st.markdown("### 문서 라이브러리 &nbsp; <span style='font-size: 14px; font-weight: normal; color: #888;'>각 문서에서 문제 풀이 · 오답 보기 · 재생성을 할 수 있습니다</span>", unsafe_allow_html=True)
+        st.markdown("### 학습 자료실 &nbsp; <span style='font-size: 14px; font-weight: normal; color: #888;'>각 파일에서 문제 풀이 · 오답 보기 · 재생성을 할 수 있습니다</span>", unsafe_allow_html=True)
     with col_search:st.text_input(
         "검색", 
         placeholder="🔍 검색...", 
@@ -86,7 +86,7 @@ def show_library_screen():
     if len(grouped_files) == 0:
         st.write("")
         st.markdown("<h1 style='font-size: 48px; margin-bottom: 10px;'>📂</h1>", unsafe_allow_html=True)
-        st.markdown("<h4 style='color: var(--text-color); margin-bottom: 10px;'>아직 보관된 문서가 없어요</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color: var(--text-color); margin-bottom: 10px;'>아직 보관된 파일이 없어요</h4>", unsafe_allow_html=True)
         st.markdown("<p style='color: #888; font-size: 15px;'>왼쪽 메뉴의 <b style='color: #FF4B4B;'>[업로드]</b> 탭으로 이동해서<br>첫 번째 교재를 올리고 나만의 문제를 만들어보세요!</p>", unsafe_allow_html=True)
         return
 
@@ -161,10 +161,10 @@ def show_library_screen():
     # ──────────────────────────────────────────
     # 폴더명 변경 다이얼로그
     # ──────────────────────────────────────────
-    @st.dialog("문서 이름 변경")
+    @st.dialog("파일 이름 변경")
     def rename_doc_dialog(f_id, current_title, group_id):
         new_title = st.text_input(
-            "새로운 문서명을 입력하세요",
+            "새로운 파일명을 입력하세요",
             value=current_title,
             label_visibility="collapsed"
         )
@@ -184,7 +184,7 @@ def show_library_screen():
                         timeout=10
                     )
                     if res.status_code == 200:
-                        st.toast("문서명이 변경되었습니다.", icon="✅")
+                        st.toast("파일명이 변경되었습니다.", icon="✅")
                         st.rerun()
                     else:
                         st.toast("변경 실패", icon="❌")
@@ -207,7 +207,7 @@ def show_library_screen():
 
         # ── 폴더명 수정 버튼 ──
         with col_edit:
-            if st.button("✏️", key=f"btn_edit_{file['id']}", help="문서 이름 변경"):
+            if st.button("✏️", key=f"btn_edit_{file['id']}", help="파일 이름 변경"):
                 rename_doc_dialog(file['id'], file['title'], file.get('group_id'))
 
         # ── 문제 재생성 버튼 ──
@@ -217,7 +217,7 @@ def show_library_screen():
                 group_id = file.get("group_id")
 
                 if not doc_id or not group_id:
-                    st.toast("문서 정보가 없습니다.", icon="⚠️")
+                    st.toast("파일 정보가 없습니다.", icon="⚠️")
                 else:
                     try:
                         regen_response = requests.post(

@@ -230,7 +230,7 @@ else:
         
         menu = option_menu(
             menu_title=None, 
-            options=["업로드", "문서 라이브러리", "문제 풀이", "오답 노트", "내보내기"],
+            options=["업로드", "학습 자료실", "오답 노트", "내보내기"],
             icons=['cloud-upload', 'folder2-open', 'pencil-square', 'journal-x', 'box-arrow-right'], 
             default_index=0,
             styles={
@@ -344,10 +344,8 @@ else:
             show_review_screen()
         elif menu == "업로드":
             show_upload_screen()
-        elif menu == "문서 라이브러리":
+        elif menu == "학습 자료실":
             show_library_screen()
-        elif menu == "문제 풀이":
-            show_quiz_screen()
         elif menu == "오답 노트":
             show_review_screen()
         elif menu == "내보내기":
