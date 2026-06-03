@@ -64,6 +64,9 @@ def show_library_screen():
             "attempts": attempts,
         })
 
+    # 문서 순서 고정: document_id 기준 정렬 (제목 변경해도 순서 유지)
+    grouped_files = sorted(grouped_files, key=lambda x: x["id"])
+
     # 문서가 없을 때 빈 화면
     if len(grouped_files) == 0:
         st.write("")
@@ -141,66 +144,57 @@ def show_library_screen():
     st.markdown("<hr style='margin: 10px 0 20px 0;'>", unsafe_allow_html=True)
 
     # ──────────────────────────────────────────
+    # 폴더명 변경 다이얼로그 (유진이 코드 참고)
+    # ──────────────────────────────────────────
+    @st.dialog("문서 이름 변경")
+    def rename_doc_dialog(f_id, current_title, group_id):
+        new_title = st.text_input(
+            "새로운 문서명을 입력하세요",
+            value=current_title,
+            label_visibility="collapsed"
+        )
+        st.write("")
+        c1, c2 = st.columns(2)
+        if c1.button("취소", use_container_width=True): st.rerun()
+        if c2.button("저장", type="primary", use_container_width=True):
+            if new_title.strip():
+                try:
+                    res = requests.patch(
+                        f"{BASE_URL}/question/document-title",
+                        json={
+                            "group_id": str(group_id),
+                            "title": new_title.strip(),
+                            "user_id": user_id,
+                        },
+                        timeout=10
+                    )
+                    if res.status_code == 200:
+                        st.toast("문서명이 변경되었습니다.", icon="✅")
+                        st.rerun()
+                    else:
+                        st.toast("변경 실패", icon="❌")
+                except Exception as e:
+                    st.toast(f"오류: {e}", icon="❌")
+
+    # ──────────────────────────────────────────
     # 문서 폴더 목록 렌더링
     # ──────────────────────────────────────────
     for file in grouped_files:
-        col_folder_title, col_regen = st.columns([8, 2])
+        # ← 유진이 코드 참고: 제목 | ✏️ | 재생성 3열 레이아웃
+        col_folder_title, col_edit, col_regen = st.columns([7.5, 0.5, 2])
 
-        # ── 폴더 제목 (수정 기능 포함) ──
+        # ── 폴더 제목 ──
         with col_folder_title:
             st.write("")
+            st.markdown(
+                f"**📁 {file['title']}** 　<span style='color:#888; font-size:14px;'>(총 {file['total_count']}회 생성 · 업로드: {file['upload_date']})</span>",
+                unsafe_allow_html=True
+            )
 
-            edit_key = f"edit_title_{file['id']}"
-            editing_key = f"editing_{file['id']}"
-
-            if st.session_state.get(editing_key):
-                # 제목 수정 모드
-                col_input, col_save, col_cancel = st.columns([5, 1, 1])
-                with col_input:
-                    new_title = st.text_input(
-                        "제목 수정",
-                        value=st.session_state.get(edit_key, file['title']),
-                        key=f"input_title_{file['id']}",
-                        label_visibility="collapsed"
-                    )
-                with col_save:
-                    if st.button("✔", key=f"save_title_{file['id']}", use_container_width=True):
-                        if new_title.strip():
-                            try:
-                                res = requests.patch(
-                                    f"{BASE_URL}/question/document-title",
-                                    json={
-                                        "group_id": str(file.get("group_id")),
-                                        "title": new_title.strip(),
-                                        "user_id": user_id,
-                                    },
-                                    timeout=10
-                                )
-                                if res.status_code == 200:
-                                    st.toast("제목이 수정되었습니다.", icon="✅")
-                                    st.session_state[editing_key] = False
-                                    st.rerun()
-                                else:
-                                    st.toast("수정 실패", icon="❌")
-                            except Exception as e:
-                                st.toast(f"오류: {e}", icon="❌")
-                with col_cancel:
-                    if st.button("✕", key=f"cancel_title_{file['id']}", use_container_width=True):
-                        st.session_state[editing_key] = False
-                        st.rerun()
-            else:
-                # 제목 일반 표시 모드
-                col_text, col_edit = st.columns([9, 1])
-                with col_text:
-                    st.markdown(
-                        f"**📁 {file['title']}** 　<span style='color:#888; font-size:14px;'>(총 {file['total_count']}회 생성 · 업로드: {file['upload_date']})</span>",
-                        unsafe_allow_html=True
-                    )
-                with col_edit:
-                    if st.button("✏️", key=f"edit_btn_{file['id']}", help="제목 수정"):
-                        st.session_state[editing_key] = True
-                        st.session_state[edit_key] = file['title']
-                        st.rerun()
+        # ── 폴더명 수정 버튼 (✏️ 아이콘) ──
+        with col_edit:
+            if st.button("✏️", key=f"btn_edit_{file['id']}", help="문서 이름 변경"):
+                rename_doc_dialog(file['id'], file['title'], file.get('group_id'))
 
         # ── 문제 재생성 버튼 ──
         with col_regen:
