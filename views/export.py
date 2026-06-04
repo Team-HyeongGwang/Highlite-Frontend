@@ -97,7 +97,7 @@ def show_export_screen():
 
     selected_group_id    = selected_doc["group_id"]     if selected_doc else None
     selected_quiz_gid    = selected_doc.get("quiz_group_id", "") if selected_doc else ""
-    selected_file_title  = selected_doc["title"]         if selected_doc else None
+    selected_file_title  = selected_doc["label"]         if selected_doc else None
     selected_label       = selected_doc["label"]         if selected_doc else "-"
 
     export_filter = st.session_state.get("export_filter", "전체")
