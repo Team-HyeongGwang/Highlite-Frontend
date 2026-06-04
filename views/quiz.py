@@ -25,7 +25,7 @@ def convert_question(q, idx):
 
     return {
         "id": f"Q{str(idx+1).zfill(2)}",
-        "imp": priority_map.get(q.get("priority", 3), "Y"),
+        "imp": priority_map.get(int(q.get("priority", 3)), "Y"),
         "type": type_map.get(q.get("question_type"), "객관식"),
         "text": q.get("question_text", ""),
         "options": options_list,
@@ -393,6 +393,45 @@ def show_quiz_screen():
                         "document_id": str(st.session_state.get("document_id", "")),
                         "quiz_group_id": str(st.session_state.get("quiz_group_id", "")),
                         "attempt_phase": "first_attempt",
+                        "answers": answers
+                    },
+                    timeout=30
+                )
+                if response.status_code == 200:
+                    st.session_state.quiz_result = response.json()
+                    st.session_state.quiz_phase = "review"
+                    st.rerun()
+                else:
+                    st.toast(f"채점 실패 (status: {response.status_code})", icon="❌")
+            except Exception as e:
+                st.toast(f"서버 연결 오류: {e}", icon="❌")
+                
+    # 다시 풀기 채점 (오답 노트 미반영)
+    elif st.session_state.quiz_phase == "retake":
+        if st.button("채점 (오답 노트 반영 X)", type="primary", use_container_width=True):
+            answers = []
+            attempt_id = st.session_state.quiz_attempt
+
+            for idx, q in enumerate(questions):
+                q_id = q["id"]
+                retry_id = st.session_state.get("retry_counts", {}).get(q_id, 0)
+                submitted = st.session_state.get(f"ans_{idx}_{attempt_id}_{retry_id}", "")
+                if submitted is None:
+                    submitted = ""
+                if q["type"] == "객관식" and submitted:
+                    submitted = submitted[0]
+                answers.append({
+                    "question_id": q["question_id"],
+                    "submitted_answer": submitted
+                })
+
+            try:
+                response = requests.post(
+                    f"{BASE_URL}/question/submit",
+                    json={
+                        "user_id": user_id,
+                        "document_id": str(st.session_state.get("document_id", "")),
+                        "attempt_phase": "regenerated",
                         "answers": answers
                     },
                     timeout=30
