@@ -8,7 +8,9 @@ def show_export_screen():
     st.write("")
 
     user_id = st.session_state.get("user_info", {}).get("user_id")
-    docs = []
+    docs = []          # 문제+해설: 회차별 목록
+    summary_docs = []  # 요약본: 문서별 목록 (group_id 기준 unique)
+
     if user_id:
         try:
             resp = requests.get(
@@ -17,90 +19,117 @@ def show_export_screen():
                 timeout=15,
             )
             if resp.status_code == 200:
+                seen_groups = set()
                 for doc in resp.json().get("documents", []):
                     gid = doc.get("group_id")
                     if not gid:
                         continue
+                    has_questions = False
                     for attempt in doc.get("attempts", []):
                         if attempt.get("q_num", 0) == 0:
                             continue
+                        has_questions = True
                         round_num = attempt.get("round", 1)
-                        quiz_gid = str(attempt.get("quiz_group_id", ""))
+                        qgid = attempt.get("quiz_group_id")
+                        quiz_gid = str(qgid) if qgid else ""
                         docs.append({
                             "title": doc["title"],
                             "label": f"{doc['title']}_{round_num}회차",
                             "group_id": gid,
                             "quiz_group_id": quiz_gid,
                         })
+                    if has_questions and gid not in seen_groups:
+                        seen_groups.add(gid)
+                        summary_docs.append({
+                            "title": doc["title"],
+                            "group_id": gid,
+                        })
         except Exception:
             pass
 
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        with st.container(border=True):
-            st.write("**1. 대상 선택**")
-            if docs:
-                selected_idx = st.selectbox(
-                    "대상 파일",
-                    range(len(docs)),
-                    format_func=lambda i: docs[i]["label"],
-                    label_visibility="collapsed",
-                )
-                selected_doc = docs[selected_idx]
-            else:
-                st.caption("업로드된 문서가 없습니다.")
-                selected_doc = None
-            st.write("")
-            st.radio(
-                "문항 필터",
-                ["전체", "핵심만", "중요만", "오답"],
-                horizontal=True,
-                label_visibility="collapsed",
-                key="export_filter",
-                disabled=st.session_state.get("export_content", "문제 + 해설") == "요약본",
-            )
-            st.write("")
-
-    with col2:
-        with st.container(border=True):
-            st.write("**2. 내보낼 내용**")
-            export_content = st.radio(
-                "내보낼 내용 선택",
-                ["문제 + 해설", "요약본"],
-                captions=["전체 문항과 해설 포함", "핵심 개념만 정리한 노트"],
-                label_visibility="collapsed",
-                key="export_content"
-            )
-            st.write("")
-            st.write("")
-            st.write("")
-            st.write("")
-
-    with col3:
-        with st.container(border=True):
-            st.write("**3. 형식 선택**")
-            export_format = st.radio(
-                "형식 선택",
-                ["PDF", "MD"],
-                captions=["PDF · 인쇄용 (문제지+답안지, A4)", "Markdown / Notion "],
-                label_visibility="collapsed",
-                key="export_format"
-            )
-            st.write("")
-            st.write("")
-            st.write("")
-            st.write("")
-
-    st.write("")
+    # ── 내보낼 내용 선택 (최상단) ──
+    export_content = st.radio(
+        "내보낼 내용",
+        ["문제 + 해설", "요약본"],
+        captions=["전체 문항과 해설 포함", "핵심 개념만 정리한 노트"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="export_content",
+    )
     st.write("")
 
-    selected_group_id    = selected_doc["group_id"]     if selected_doc else None
-    selected_quiz_gid    = selected_doc.get("quiz_group_id", "") if selected_doc else ""
-    selected_file_title  = selected_doc["label"]         if selected_doc else None
-    selected_label       = selected_doc["label"]         if selected_doc else "-"
-
+    selected_doc = None
     export_filter = st.session_state.get("export_filter", "전체")
+    export_format = st.session_state.get("export_format", "PDF")
+
+    # ── 문제 + 해설: 회차 선택 | 문항 필터 | 형식 선택 ──
+    if export_content == "문제 + 해설":
+        with st.container(border=True):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.write("**1. 회차 선택**")
+                if docs:
+                    selected_idx = st.selectbox(
+                        "대상 파일",
+                        range(len(docs)),
+                        format_func=lambda i: docs[i]["label"],
+                        label_visibility="collapsed",
+                    )
+                    selected_doc = docs[selected_idx]
+                else:
+                    st.caption("업로드된 문서가 없습니다.")
+            with c2:
+                st.write("**2. 문항 필터**")
+                export_filter = st.radio(
+                    "문항 필터",
+                    ["전체", "핵심만", "중요만", "오답"],
+                    label_visibility="collapsed",
+                    key="export_filter",
+                )
+            with c3:
+                st.write("**3. 형식 선택**")
+                export_format = st.radio(
+                    "형식 선택",
+                    ["PDF", "MD"],
+                    captions=["PDF · 인쇄용 (문제지+답안지, A4)", "Markdown / Notion"],
+                    label_visibility="collapsed",
+                    key="export_format",
+                )
+
+    # ── 요약본: 문서 선택 | 형식 선택 ──
+    else:
+        with st.container(border=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                st.write("**1. 문서 선택**")
+                if summary_docs:
+                    selected_idx = st.selectbox(
+                        "문서",
+                        range(len(summary_docs)),
+                        format_func=lambda i: summary_docs[i]["title"],
+                        label_visibility="collapsed",
+                    )
+                    selected_doc = summary_docs[selected_idx]
+                else:
+                    st.caption("업로드된 문서가 없습니다.")
+            with c2:
+                st.write("**2. 형식 선택**")
+                export_format = st.radio(
+                    "형식 선택",
+                    ["PDF", "MD"],
+                    captions=["PDF · 인쇄용 (문제지+답안지, A4)", "Markdown / Notion"],
+                    label_visibility="collapsed",
+                    key="export_format",
+                )
+
+    st.write("")
+    st.write("")
+
+    selected_group_id   = selected_doc["group_id"]                          if selected_doc else None
+    selected_quiz_gid   = selected_doc.get("quiz_group_id", "")             if selected_doc else ""
+    selected_file_title = selected_doc.get("label", selected_doc["title"])  if selected_doc else None
+    selected_label      = selected_doc.get("label", selected_doc["title"])  if selected_doc else "-"
+
     effective_filter = export_filter if export_content == "문제 + 해설" else "전체"
 
     # 요약본 캐시는 group_id 기준 (회차 달라도 같은 문서 = 같은 요약)
