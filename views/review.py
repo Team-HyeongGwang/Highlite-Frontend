@@ -277,7 +277,7 @@ def show_review_screen():
         # ──────────────────────────────────────────
         btn_c1, btn_space, btn_c2 = st.columns([2, 6, 2.5])
         with btn_c1:
-            if st.button("← 오답 목록으로 돌아가기"):
+            if st.button("← 라이브러리로 돌아가기"):
                 st.session_state.selected_quiz_result_id = None
                 st.session_state.retry_mode_active = False
                 st.session_state.retry_graded = False
