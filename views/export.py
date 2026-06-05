@@ -303,12 +303,28 @@ def _do_export(
 ):
     cached_key = st.session_state.get("preview_key")
 
-    # 요약본 PDF — 캐시 있으면 GPT 재호출 없이 렌더링
-    if (
-        export_content == "요약본" and fmt == "pdf"
-        and cached_key == preview_key
-        and "preview_synthesized" in st.session_state
-    ):
+    # 요약본 PDF — 캐시 없으면 MD 생성 후 캐시 저장, 캐시 있으면 바로 PDF 렌더링
+    if export_content == "요약본" and fmt == "pdf":
+        if not (cached_key == preview_key and "preview_synthesized" in st.session_state):
+            with st.spinner("요약본 생성 중..."):
+                try:
+                    resp = requests.get(
+                        f"{BASE_URL}/export/summary",
+                        params={"group_id": group_id, "format": "md"},
+                        timeout=60,
+                    )
+                    if resp.status_code != 200:
+                        st.error("내보내기 실패: 서버 오류입니다.")
+                        return
+                    fetched_md = resp.content.decode("utf-8")
+                    lines = fetched_md.splitlines()
+                    st.session_state.preview_content     = fetched_md
+                    st.session_state.preview_key         = preview_key
+                    st.session_state.preview_synthesized = "\n".join(lines[2:] if len(lines) > 2 else lines)
+                    st.session_state.preview_title       = lines[0].lstrip("# ").strip() if lines else ""
+                except Exception as e:
+                    st.error(f"서버 연결 오류: {e}")
+                    return
         with st.spinner("PDF 생성 중..."):
             try:
                 resp = requests.post(
