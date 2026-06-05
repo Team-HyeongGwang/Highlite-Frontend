@@ -35,6 +35,7 @@ def show_export_screen():
                             "label": f"{doc['title']}_{round_num}회차",
                             "group_id": gid,
                             "quiz_group_id": quiz_gid,
+                            "score": attempt.get("score"),  # None=미응시, 100=만점, 기타=오답 있음
                         })
                     if gid not in seen_groups:
                         seen_groups.add(gid)
@@ -78,9 +79,19 @@ def show_export_screen():
                     st.caption("업로드된 문서가 없습니다.")
             with c2:
                 st.write("**2. 문항 필터**")
+                has_rankings = bool(st.session_state.get("hl_ranks") or st.session_state.get("pen_ranks"))
+                selected_score = selected_doc.get("score") if selected_doc else None
+                has_wrong = selected_score is not None and selected_score != 100
+                filter_options = ["전체"]
+                if has_rankings:
+                    filter_options += ["핵심만", "중요만"]
+                if has_wrong:
+                    filter_options.append("오답")
+                if st.session_state.get("export_filter") not in filter_options:
+                    st.session_state["export_filter"] = "전체"
                 export_filter = st.radio(
                     "문항 필터",
-                    ["전체", "핵심만", "중요만", "오답"],
+                    filter_options,
                     label_visibility="collapsed",
                     key="export_filter",
                 )
@@ -133,7 +144,7 @@ def show_export_screen():
     # 요약본 캐시는 group_id 기준 (회차 달라도 같은 문서 = 같은 요약)
     _cache_id   = selected_group_id if export_content == "요약본" else selected_quiz_gid
     preview_key = f"{_cache_id}_{export_content}_{effective_filter}"
-    export_key  = f"{selected_quiz_gid}_{export_format}_{export_content}_{effective_filter}"
+    export_key  = f"{_cache_id}_{export_format}_{export_content}_{effective_filter}"
 
     if st.session_state.get("export_key") != export_key:
         st.session_state.pop("export_ready", None)
