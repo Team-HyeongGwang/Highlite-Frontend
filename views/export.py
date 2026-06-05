@@ -24,11 +24,9 @@ def show_export_screen():
                     gid = doc.get("group_id")
                     if not gid:
                         continue
-                    has_questions = False
                     for attempt in doc.get("attempts", []):
                         if attempt.get("q_num", 0) == 0:
                             continue
-                        has_questions = True
                         round_num = attempt.get("round", 1)
                         qgid = attempt.get("quiz_group_id")
                         quiz_gid = str(qgid) if qgid else ""
@@ -38,7 +36,7 @@ def show_export_screen():
                             "group_id": gid,
                             "quiz_group_id": quiz_gid,
                         })
-                    if has_questions and gid not in seen_groups:
+                    if gid not in seen_groups:
                         seen_groups.add(gid)
                         summary_docs.append({
                             "title": doc["title"],
