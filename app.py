@@ -80,7 +80,7 @@ if "access_token" not in st.session_state:
             st.session_state["auth_initialized"] = True
             with st.spinner("로그인 상태를 확인하고 있습니다..."):
                 time.sleep(0.2) # 쿠키 동기화를 위한 미세한 대기 시간 부여
-            st.rerun() # 쿠키 데이터가 수신된 상태로 스크립트를 즉시 강제 재실행!
+            st.rerun() 
 
 if "token" in st.query_params:
     token = st.query_params["token"]
