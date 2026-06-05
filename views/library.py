@@ -219,6 +219,9 @@ def show_library_screen():
                 if not doc_id or not group_id:
                     st.toast("파일 정보가 없습니다.", icon="⚠️")
                 else:
+                    # 최근 회차의 문제 수 가져오기
+                    last_q_num = file['attempts'][0]['q_num'] if file['attempts'] else 10
+
                     try:
                         regen_response = requests.post(
                             f"{BASE_URL}/question/regenerate-from-wrong",
@@ -226,10 +229,10 @@ def show_library_screen():
                                 "user_id": user_id,
                                 "document_id": doc_id,
                                 "group_id": str(group_id),
-                                "question_count": 10
+                                "question_count": last_q_num
                             },
                             timeout=300
-                        )
+                        )                        
                         if regen_response.status_code == 200:
                             result = regen_response.json()
                             questions = result.get("questions", [])

@@ -25,7 +25,7 @@ def convert_question(q, idx):
 
     return {
         "id": f"Q{str(idx+1).zfill(2)}",
-        "imp": priority_map.get(q.get("priority", 3), "Y"),
+        "imp": priority_map.get(int(q.get("priority", 3)), "Y"),
         "type": type_map.get(q.get("question_type"), "객관식"),
         "text": q.get("question_text", ""),
         "options": options_list,
@@ -43,6 +43,65 @@ def convert_question(q, idx):
 # ────────────────────────────────────────
 @st.dialog("이 문항에 오류가 있나요?")
 def show_feedback_dialog(q_id, q):
+
+    # ── 수정: 출제 불가 문제 감지 시 별도 UI 표시 ──
+    REJECTION_KEYWORDS = ["출제가 불가능", "학습 개념이 포함되어 있지 않", "출제 불가"]
+    is_invalid_question = any(kw in q.get("text", "") for kw in REJECTION_KEYWORDS)
+
+    if is_invalid_question:
+        # 출제 불가 문제일 경우 일반 피드백 UI 대신 안내 메시지 + 재생성 버튼만 표시
+        st.warning("⚠️ 이 문제는 원문에 실질적인 학습 개념이 없어 정상적으로 출제되지 못했습니다.")
+        st.caption("아래 버튼을 눌러 다른 내용으로 재생성할 수 있습니다.")
+        st.write("")
+
+        if st.button("재생성 요청", type="primary", use_container_width=True):
+            try:
+                response = requests.post(
+                    f"{BASE_URL}/question/regenerate-from-feedback",
+                    json={
+                        "question_id": q["question_id"],
+                        "importance_id": 1,
+                        "context_text": q["text"],
+                        "keywords": q.get("keywords", []),
+                        "question_type": q["question_type"],
+                        "feedback_type": "irrelevant",  # 출제 불가 → 관련없는 문제로 처리
+                        "retry_count": 0
+                    }
+                )
+                if response.status_code == 200:
+                    new_q = response.json()
+                    for i, orig_q in enumerate(st.session_state.questions):
+                        if orig_q.get("question_id") == q["question_id"]:
+                            st.session_state.questions[i]["question_text"] = new_q["question_text"]
+                            st.session_state.questions[i]["options"] = new_q.get("options")
+                            st.session_state.questions[i]["answer"] = new_q["answer"]
+                            st.session_state.questions[i]["explanation"] = new_q["explanation"]
+
+                            attempt_id = st.session_state.get("quiz_attempt", 0)
+                            retry_id = st.session_state.get("retry_counts", {}).get(q_id, 0)
+                            for k in [f"ans_{i}_{attempt_id}_{retry_id}", f"widget_ans_{i}_{attempt_id}_{retry_id}"]:
+                                if k in st.session_state:
+                                    del st.session_state[k]
+
+                            if "quiz_result" in st.session_state:
+                                results = st.session_state.quiz_result.get("results", [])
+                                st.session_state.quiz_result["results"] = [
+                                    r for r in results if r["question_id"] != q["question_id"]
+                                ]
+                            break
+
+                    st.session_state.quiz_phase = "first_attempt"
+                    st.success(f"{q_id} 문항이 재생성되었습니다! 다시 풀어보세요 ✅")
+                    time.sleep(1.5)
+                    st.rerun()
+                else:
+                    st.toast("재생성 실패", icon="❌")
+            except Exception as e:
+                st.toast(f"서버 연결 오류: {e}", icon="❌")
+        return  # 출제 불가인 경우 아래 일반 피드백 UI는 표시하지 않음
+    # ── 수정 끝 ──
+
+    # ── 일반 피드백 UI (기존 코드 그대로) ──
     st.markdown(f"**{q_id}** 문항에 대한 피드백을 선택해주세요.")
 
     feedback_label = st.radio(
@@ -393,6 +452,45 @@ def show_quiz_screen():
                         "document_id": str(st.session_state.get("document_id", "")),
                         "quiz_group_id": str(st.session_state.get("quiz_group_id", "")),
                         "attempt_phase": "first_attempt",
+                        "answers": answers
+                    },
+                    timeout=30
+                )
+                if response.status_code == 200:
+                    st.session_state.quiz_result = response.json()
+                    st.session_state.quiz_phase = "review"
+                    st.rerun()
+                else:
+                    st.toast(f"채점 실패 (status: {response.status_code})", icon="❌")
+            except Exception as e:
+                st.toast(f"서버 연결 오류: {e}", icon="❌")
+                
+    # 다시 풀기 채점 (오답 노트 미반영)
+    elif st.session_state.quiz_phase == "retake":
+        if st.button("채점 (오답 노트 반영 X)", type="primary", use_container_width=True):
+            answers = []
+            attempt_id = st.session_state.quiz_attempt
+
+            for idx, q in enumerate(questions):
+                q_id = q["id"]
+                retry_id = st.session_state.get("retry_counts", {}).get(q_id, 0)
+                submitted = st.session_state.get(f"ans_{idx}_{attempt_id}_{retry_id}", "")
+                if submitted is None:
+                    submitted = ""
+                if q["type"] == "객관식" and submitted:
+                    submitted = submitted[0]
+                answers.append({
+                    "question_id": q["question_id"],
+                    "submitted_answer": submitted
+                })
+
+            try:
+                response = requests.post(
+                    f"{BASE_URL}/question/submit",
+                    json={
+                        "user_id": user_id,
+                        "document_id": str(st.session_state.get("document_id", "")),
+                        "attempt_phase": "regenerated",
                         "answers": answers
                     },
                     timeout=30
