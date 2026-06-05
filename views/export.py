@@ -8,7 +8,9 @@ def show_export_screen():
     st.write("")
 
     user_id = st.session_state.get("user_info", {}).get("user_id")
-    docs = []
+    docs = []          # 문제+해설: 회차별 목록
+    summary_docs = []  # 요약본: 문서별 목록 (group_id 기준 unique)
+
     if user_id:
         try:
             resp = requests.get(
@@ -17,84 +19,138 @@ def show_export_screen():
                 timeout=15,
             )
             if resp.status_code == 200:
-                seen_group_ids = set()
+                seen_groups = set()
                 for doc in resp.json().get("documents", []):
                     gid = doc.get("group_id")
-                    if gid and gid not in seen_group_ids:
-                        seen_group_ids.add(gid)
+                    if not gid:
+                        continue
+                    for attempt in doc.get("attempts", []):
+                        if attempt.get("q_num", 0) == 0:
+                            continue
+                        round_num = attempt.get("round", 1)
+                        qgid = attempt.get("quiz_group_id")
+                        quiz_gid = str(qgid) if qgid else ""
                         docs.append({
+                            "title": doc["title"],
+                            "label": f"{doc['title']}_{round_num}회차",
+                            "group_id": gid,
+                            "quiz_group_id": quiz_gid,
+                            "score": attempt.get("score"),  # None=미응시, 100=만점, 기타=오답 있음
+                        })
+                    if gid not in seen_groups:
+                        seen_groups.add(gid)
+                        summary_docs.append({
                             "title": doc["title"],
                             "group_id": gid,
                         })
         except Exception:
             pass
 
-    file_titles = [d["title"] for d in docs]
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        with st.container(border=True):
-            st.write("**1. 대상 선택**")
-            if file_titles:
-                selected_file_title = st.selectbox("대상 파일", file_titles, label_visibility="collapsed")
-            else:
-                st.caption("업로드된 문서가 없습니다.")
-                selected_file_title = None
-            st.write("")
-            st.radio(
-                "문항 필터",
-                ["전체", "핵심만", "중요만", "오답만"],
-                horizontal=True,
-                label_visibility="collapsed",
-                key="export_filter",
-                disabled=st.session_state.get("export_content", "문제 + 해설") == "요약본",
-            )
-            st.write("")
-
-    with col2:
-        with st.container(border=True):
-            st.write("**2. 내보낼 내용**")
-            export_content = st.radio(
-                "내보낼 내용 선택",
-                ["문제 + 해설", "요약본"],
-                captions=["전체 문항과 해설 포함", "핵심 개념만 정리한 노트"],
-                label_visibility="collapsed",
-                key="export_content"
-            )
-
-    with col3:
-        with st.container(border=True):
-            st.write("**3. 형식 선택**")
-            export_format = st.radio(
-                "형식 선택",
-                ["PDF", "MD"],
-                captions=["PDF · 인쇄용 (문제지+답안지, A4)", "Markdown / Notion (체크박스 형식, 복붙 가능)"],
-                label_visibility="collapsed",
-                key="export_format"
-            )
-
-    st.write("")
+    # ── 내보낼 내용 선택 (최상단) ──
+    export_content = st.radio(
+        "내보낼 내용",
+        ["문제 + 해설", "요약본"],
+        captions=["전체 문항과 해설 포함", "핵심 개념만 정리한 노트"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="export_content",
+    )
     st.write("")
 
-    selected_group_id = None
-    if selected_file_title:
-        for d in docs:
-            if d["title"] == selected_file_title:
-                selected_group_id = d["group_id"]
-                break
-
-    # 요약본은 필터 무관, 문제+해설만 필터 적용
+    selected_doc = None
     export_filter = st.session_state.get("export_filter", "전체")
+    export_format = st.session_state.get("export_format", "PDF")
+
+    # ── 문제 + 해설: 회차 선택 | 문항 필터 | 형식 선택 ──
+    if export_content == "문제 + 해설":
+        with st.container(border=True):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.write("**1. 회차 선택**")
+                if docs:
+                    selected_idx = st.selectbox(
+                        "대상 파일",
+                        range(len(docs)),
+                        format_func=lambda i: docs[i]["label"],
+                        label_visibility="collapsed",
+                    )
+                    selected_doc = docs[selected_idx]
+                else:
+                    st.caption("업로드된 문서가 없습니다.")
+            with c2:
+                st.write("**2. 문항 필터**")
+                has_rankings = bool(st.session_state.get("hl_ranks") or st.session_state.get("pen_ranks"))
+                selected_score = selected_doc.get("score") if selected_doc else None
+                has_wrong = selected_score is not None and selected_score != 100
+                filter_options = ["전체"]
+                if has_rankings:
+                    filter_options += ["핵심만", "중요만"]
+                if has_wrong:
+                    filter_options.append("오답")
+                if st.session_state.get("export_filter") not in filter_options:
+                    st.session_state["export_filter"] = "전체"
+                export_filter = st.radio(
+                    "문항 필터",
+                    filter_options,
+                    label_visibility="collapsed",
+                    key="export_filter",
+                )
+            with c3:
+                st.write("**3. 형식 선택**")
+                export_format = st.radio(
+                    "형식 선택",
+                    ["PDF", "MD"],
+                    captions=["PDF · 인쇄용 (문제지+답안지, A4)", "Markdown / Notion"],
+                    label_visibility="collapsed",
+                    key="export_format",
+                )
+
+    # ── 요약본: 문서 선택 | 형식 선택 ──
+    else:
+        with st.container(border=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                st.write("**1. 문서 선택**")
+                if summary_docs:
+                    selected_idx = st.selectbox(
+                        "문서",
+                        range(len(summary_docs)),
+                        format_func=lambda i: summary_docs[i]["title"],
+                        label_visibility="collapsed",
+                    )
+                    selected_doc = summary_docs[selected_idx]
+                else:
+                    st.caption("업로드된 문서가 없습니다.")
+            with c2:
+                st.write("**2. 형식 선택**")
+                export_format = st.radio(
+                    "형식 선택",
+                    ["PDF", "MD"],
+                    captions=["PDF · 인쇄용 (문제지+답안지, A4)", "Markdown / Notion"],
+                    label_visibility="collapsed",
+                    key="export_format",
+                )
+
+    st.write("")
+    st.write("")
+
+    selected_group_id   = selected_doc["group_id"]                          if selected_doc else None
+    selected_quiz_gid   = selected_doc.get("quiz_group_id", "")             if selected_doc else ""
+    selected_file_title = selected_doc.get("label", selected_doc["title"])  if selected_doc else None
+    selected_label      = selected_doc.get("label", selected_doc["title"])  if selected_doc else "-"
+
     effective_filter = export_filter if export_content == "문제 + 해설" else "전체"
 
-    preview_key = f"{selected_group_id}_{export_content}_{effective_filter}"
-    export_key  = f"{selected_group_id}_{export_format}_{export_content}_{effective_filter}"
+    # 요약본 캐시는 group_id 기준 (회차 달라도 같은 문서 = 같은 요약)
+    _cache_id   = selected_group_id if export_content == "요약본" else selected_quiz_gid
+    preview_key = f"{_cache_id}_{export_content}_{effective_filter}"
+    export_key  = f"{_cache_id}_{export_format}_{export_content}_{effective_filter}"
 
     if st.session_state.get("export_key") != export_key:
         st.session_state.pop("export_ready", None)
         st.session_state.pop("export_filename", None)
         st.session_state.pop("export_mime", None)
+        st.session_state.pop("show_preview", None)
 
     can_export = selected_group_id is not None
 
@@ -103,7 +159,7 @@ def show_export_screen():
 
         with b_col1:
             st.write("**미리보기 요약**")
-            st.caption(f"{selected_file_title or '-'} · {export_content} · {export_format}")
+            st.caption(f"{selected_label} · {export_content} · {export_format}")
 
         with b_col2:
             st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
@@ -123,21 +179,23 @@ def show_export_screen():
                 )
             else:
                 if st.button("내보내기", type="primary", use_container_width=True, disabled=not can_export):
-                    fmt = export_format.lower()
                     _do_export(
-                        export_content, fmt, selected_group_id,
+                        export_content, export_format.lower(), selected_group_id,
                         selected_file_title, export_key, preview_key,
-                        effective_filter, user_id,
+                        effective_filter, user_id, selected_quiz_gid,
                     )
 
-    # 미리보기 버튼 처리
     if preview_clicked:
-        _do_preview(export_content, selected_group_id, preview_key, effective_filter, user_id)
+        st.session_state.show_preview = True
+        _do_preview(
+            export_content, selected_group_id, preview_key,
+            effective_filter, user_id,
+            export_format.lower(), export_key, selected_file_title, selected_quiz_gid,
+        )
 
-    # 미리보기 결과 표시
     cached_preview = st.session_state.get("preview_content")
     cached_preview_key = st.session_state.get("preview_key")
-    if cached_preview and cached_preview_key == preview_key:
+    if cached_preview and cached_preview_key == preview_key and st.session_state.get("show_preview"):
         with st.expander("미리보기", expanded=True):
             display_text = cached_preview
             display_text = display_text.replace("\n# ", "\n#### ")
@@ -148,59 +206,125 @@ def show_export_screen():
 
 
 def _do_preview(export_content: str, group_id: str, preview_key: str,
-                export_filter: str = "전체", user_id: int = None):
-    """미리보기: MD 포맷으로 한 번 가져와서 session state에 캐시."""
-    if st.session_state.get("preview_key") == preview_key and "preview_content" in st.session_state:
-        return
-
+                export_filter: str = "전체", user_id: int = None,
+                export_format: str = "md", export_key: str = "",
+                file_title: str = "", quiz_group_id: str = ""):
+    # 요약본만 캐시 사용 (문제+해설은 재생성 반영을 위해 항상 fresh fetch)
     if export_content == "요약본":
-        endpoint = f"{BASE_URL}/export/summary"
-        spinner_msg = "요약본 생성 중..."
-    else:
-        endpoint = f"{BASE_URL}/export/questions"
-        spinner_msg = "문제지 불러오는 중..."
+        if st.session_state.get("preview_key") == preview_key and "preview_content" in st.session_state:
+            if "export_ready" not in st.session_state:
+                _prepare_download_from_cache(export_content, export_format, export_key, file_title)
+            return
 
+    endpoint = f"{BASE_URL}/export/summary" if export_content == "요약본" else f"{BASE_URL}/export/questions"
+    spinner_msg = "요약본 생성 중..." if export_content == "요약본" else "문제지 불러오는 중..."
+
+    fetched_md = None
     with st.spinner(spinner_msg):
         try:
             params = {"group_id": group_id, "format": "md"}
             if export_content == "문제 + 해설":
                 params["filter"] = export_filter
-                if export_filter in ("오답만", "핵심만", "중요만") and user_id:
+                if export_filter in ("오답", "핵심만", "중요만") and user_id:
                     params["user_id"] = user_id
+                if quiz_group_id:
+                    params["quiz_group_id"] = quiz_group_id
             resp = requests.get(endpoint, params=params, timeout=60)
             if resp.status_code == 200:
-                md_text = resp.content.decode("utf-8")
-                st.session_state.preview_content = md_text
-                st.session_state.preview_key = preview_key
-                # 요약본인 경우 합성 텍스트도 따로 저장 (PDF 렌더링에 재사용)
-                if export_content == "요약본":
-                    # MD 결과에서 첫 줄(# 제목) 제거해 synthesized_text 추출
-                    lines = md_text.splitlines()
-                    body_lines = lines[2:] if len(lines) > 2 else lines
-                    st.session_state.preview_synthesized = "\n".join(body_lines)
-                    st.session_state.preview_title = lines[0].lstrip("# ").strip() if lines else ""
-                st.rerun()
+                fetched_md = resp.content.decode("utf-8")
+            elif resp.status_code == 404:
+                st.error("해당 조건에 맞는 문제가 없습니다. 다른 필터를 선택해보세요.")
             else:
-                st.error("미리보기 실패: 분석 결과가 없거나 서버 오류입니다.")
+                st.error("미리보기 실패: 서버 오류입니다.")
         except Exception as e:
             st.error(f"서버 연결 오류: {e}")
+
+    if fetched_md is None:
+        return
+
+    # session state 저장 (try-except 밖에서)
+    st.session_state.preview_content = fetched_md
+    st.session_state.preview_key = preview_key
+    if export_content == "요약본":
+        lines = fetched_md.splitlines()
+        body_lines = lines[2:] if len(lines) > 2 else lines
+        st.session_state.preview_synthesized = "\n".join(body_lines)
+        st.session_state.preview_title = lines[0].lstrip("# ").strip() if lines else ""
+
+    # 다운로드도 자동 준비 (st.rerun() 가능)
+    _prepare_download_from_cache(export_content, export_format, export_key, file_title)
+
+
+def _prepare_download_from_cache(export_content: str, export_format: str,
+                                  export_key: str, file_title: str):
+    fmt = export_format.lower()
+    clean_title = (file_title or "export").replace(".pdf", "")
+
+    if export_content == "요약본":
+        if fmt == "md" and "preview_content" in st.session_state:
+            st.session_state.export_ready    = st.session_state.preview_content.encode("utf-8")
+            st.session_state.export_filename = f"{clean_title}_summary.md"
+            st.session_state.export_mime     = "text/markdown"
+            st.session_state.export_key      = export_key
+            st.rerun()
+        elif fmt == "pdf" and "preview_synthesized" in st.session_state:
+            try:
+                resp = requests.post(
+                    f"{BASE_URL}/export/render-summary-pdf",
+                    json={
+                        "title": st.session_state.preview_title,
+                        "synthesized_text": st.session_state.preview_synthesized,
+                    },
+                    timeout=30,
+                )
+                if resp.status_code == 200:
+                    st.session_state.export_ready    = resp.content
+                    st.session_state.export_filename = f"{clean_title}_summary.pdf"
+                    st.session_state.export_mime     = "application/pdf"
+                    st.session_state.export_key      = export_key
+                    st.rerun()
+            except Exception:
+                pass
+    else:
+        # 문제+해설 MD: 캐시 그대로 사용
+        if fmt == "md" and "preview_content" in st.session_state:
+            st.session_state.export_ready    = st.session_state.preview_content.encode("utf-8")
+            st.session_state.export_filename = f"{clean_title}_questions.md"
+            st.session_state.export_mime     = "text/markdown"
+            st.session_state.export_key      = export_key
+            st.rerun()
+        # 문제+해설 PDF: _do_export에서 처리
 
 
 def _do_export(
     export_content: str, fmt: str, group_id: str,
     file_title: str, export_key: str, preview_key: str,
-    export_filter: str = "전체", user_id: int = None,
+    export_filter: str = "전체", user_id: int = None, quiz_group_id: str = "",
 ):
-    """내보내기: 가능하면 캐시 재사용, 없으면 API 호출."""
     cached_key = st.session_state.get("preview_key")
 
-    # 요약본 PDF — 캐시된 합성 텍스트가 있으면 GPT 재호출 없이 렌더링만
-    if (
-        export_content == "요약본"
-        and fmt == "pdf"
-        and cached_key == preview_key
-        and "preview_synthesized" in st.session_state
-    ):
+    # 요약본 PDF — 캐시 없으면 MD 생성 후 캐시 저장, 캐시 있으면 바로 PDF 렌더링
+    if export_content == "요약본" and fmt == "pdf":
+        if not (cached_key == preview_key and "preview_synthesized" in st.session_state):
+            with st.spinner("요약본 생성 중..."):
+                try:
+                    resp = requests.get(
+                        f"{BASE_URL}/export/summary",
+                        params={"group_id": group_id, "format": "md"},
+                        timeout=60,
+                    )
+                    if resp.status_code != 200:
+                        st.error("내보내기 실패: 서버 오류입니다.")
+                        return
+                    fetched_md = resp.content.decode("utf-8")
+                    lines = fetched_md.splitlines()
+                    st.session_state.preview_content     = fetched_md
+                    st.session_state.preview_key         = preview_key
+                    st.session_state.preview_synthesized = "\n".join(lines[2:] if len(lines) > 2 else lines)
+                    st.session_state.preview_title       = lines[0].lstrip("# ").strip() if lines else ""
+                except Exception as e:
+                    st.error(f"서버 연결 오류: {e}")
+                    return
         with st.spinner("PDF 생성 중..."):
             try:
                 resp = requests.post(
@@ -212,7 +336,7 @@ def _do_export(
                     timeout=30,
                 )
                 if resp.status_code == 200:
-                    _save_export(resp, f"{file_title.replace('.pdf', '')}_summary.pdf",
+                    _save_export(resp, f"{(file_title or 'export').replace('.pdf','')}_summary.pdf",
                                  "application/pdf", export_key)
                 else:
                     st.error("내보내기 실패: 서버 오류입니다.")
@@ -220,46 +344,63 @@ def _do_export(
                 st.error(f"서버 연결 오류: {e}")
         return
 
-    # 요약본 MD — 캐시된 MD 텍스트가 있으면 바로 저장
+    # 요약본 MD — 캐시 있으면 바로 저장
     if (
-        export_content == "요약본"
-        and fmt == "md"
+        export_content == "요약본" and fmt == "md"
         and cached_key == preview_key
         and "preview_content" in st.session_state
     ):
-        md_bytes = st.session_state.preview_content.encode("utf-8")
-        filename = f"{file_title.replace('.pdf', '')}_summary.md"
-        st.session_state.export_ready    = md_bytes
-        st.session_state.export_filename = filename
+        clean = (file_title or "export").replace(".pdf", "")
+        st.session_state.export_ready    = st.session_state.preview_content.encode("utf-8")
+        st.session_state.export_filename = f"{clean}_summary.md"
         st.session_state.export_mime     = "text/markdown"
         st.session_state.export_key      = export_key
         st.rerun()
         return
 
-    # 그 외 (문제+해설, 또는 미리보기 캐시 없는 경우) — 일반 API 호출
+    # 그 외 — 일반 API 호출
+    # 요약본: 항상 MD로 받아 캐시 저장 → 포맷에 맞게 처리 (미리보기와 동일한 내용 보장)
     if export_content == "요약본":
-        endpoint      = f"{BASE_URL}/export/summary"
-        spinner_msg   = "요약본 생성 중..."
-        filename_suf  = "summary"
-    else:
-        endpoint      = f"{BASE_URL}/export/questions"
-        spinner_msg   = "문제지 생성 중..."
-        filename_suf  = "questions"
+        with st.spinner("요약본 생성 중..."):
+            try:
+                resp = requests.get(
+                    f"{BASE_URL}/export/summary",
+                    params={"group_id": group_id, "format": "md"},
+                    timeout=60,
+                )
+                if resp.status_code == 200:
+                    fetched_md = resp.content.decode("utf-8")
+                    lines = fetched_md.splitlines()
+                    st.session_state.preview_content     = fetched_md
+                    st.session_state.preview_key         = preview_key
+                    st.session_state.preview_synthesized = "\n".join(lines[2:] if len(lines) > 2 else lines)
+                    st.session_state.preview_title       = lines[0].lstrip("# ").strip() if lines else ""
+                    _prepare_download_from_cache(export_content, fmt, export_key, file_title)
+                else:
+                    st.error("내보내기 실패: 서버 오류입니다.")
+            except Exception as e:
+                st.error(f"서버 연결 오류: {e}")
+        return
 
-    with st.spinner(spinner_msg):
+    # 문제 + 해설 일반 API 호출
+    with st.spinner("문제지 생성 중..."):
         try:
             params = {"group_id": group_id, "format": fmt}
-            if export_content == "문제 + 해설":
-                params["filter"] = export_filter
-                if export_filter in ("오답만", "핵심만", "중요만") and user_id:
-                    params["user_id"] = user_id
-            resp = requests.get(endpoint, params=params, timeout=60)
+            params["filter"] = export_filter
+            if export_filter in ("오답", "핵심만", "중요만") and user_id:
+                params["user_id"] = user_id
+            if quiz_group_id:
+                params["quiz_group_id"] = quiz_group_id
+            resp = requests.get(f"{BASE_URL}/export/questions", params=params, timeout=60)
             if resp.status_code == 200:
-                filename = f"{file_title.replace('.pdf', '')}_{filename_suf}.{fmt}"
+                clean    = (file_title or "export").replace(".pdf", "")
+                filename = f"{clean}_questions.{fmt}"
                 mime     = "application/pdf" if fmt == "pdf" else "text/markdown"
                 _save_export(resp, filename, mime, export_key)
+            elif resp.status_code == 404:
+                st.error("해당 조건에 맞는 문제가 없습니다.")
             else:
-                st.error("내보내기 실패: 분석 결과가 없거나 서버 오류입니다.")
+                st.error("내보내기 실패: 서버 오류입니다.")
         except Exception as e:
             st.error(f"서버 연결 오류: {e}")
 
