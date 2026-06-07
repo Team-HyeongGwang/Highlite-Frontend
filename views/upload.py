@@ -180,14 +180,26 @@ def show_upload_screen():
     # ──────────────────────────────────────────
     # 문제 생성 버튼 → API 연동
     # ──────────────────────────────────────────
-    if st.button("문제 생성", type="primary", use_container_width=True, key="btn_gen_quiz"):
 
+    # 문제 생성 상태 초기화
+    if 'is_generating' not in st.session_state:
+        st.session_state.is_generating = False
+    
+    if st.button("문제 생성", type="primary", use_container_width=True, key="btn_gen_quiz",
+                 disabled=st.session_state.is_generating):
+        st.session_state.is_generating = True  # 문제 생성 시작
+        st.session_state.pending_generate = True # 작업 대기 플래그 
+        st.rerun()
+
+    # 버튼 클릭과 분리된 실제 실행 블록
+    if st.session_state.get("pending_generate"):
+        st.session_state.pending_generate = False  # 대기 플래그 초기화
+        
         # 랭킹 정보 DB 저장
         user_id = st.session_state.get("user_info", {}).get("user_id")
         if not user_id:
             st.error("로그인이 필요합니다.")
             return
-        
     
         group_id = str(uuid.uuid4())
 
@@ -244,7 +256,7 @@ def show_upload_screen():
         except Exception as e:
             print(f"⚠️ 백엔드 통신 오류: {e}")
 
-# 문제 생성 API 호출
+        # 문제 생성 API 호출
         with st.status("AI 1타 강사가 문서를 분석하고 있습니다...", expanded=True) as status:
             st.write("🔍 PDF 텍스트 및 중요도 색상(형광펜/필기펜) 추출 중...")
             time.sleep(0.5)
@@ -305,3 +317,5 @@ def show_upload_screen():
             except Exception as e:
                 status.update(label="연결 오류", state="error", expanded=True)
                 st.error(f"서버 연결 오류: {e}")
+            finally:
+                st.session_state.is_generating = False  # ← 성공/실패 무관하게 항상 해제
