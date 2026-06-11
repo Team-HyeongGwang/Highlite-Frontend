@@ -61,7 +61,10 @@ if "pending_login_token" in st.session_state:
     del st.session_state["pending_login_token"]
 
 if "access_token" not in st.session_state:
-    cookie_token = cookie_controller.get("highlite_token")
+    try:
+        cookie_token = cookie_controller.get("highlite_token")
+    except TypeError:
+        cookie_token = None
     if cookie_token:
         st.session_state["access_token"] = cookie_token
         try:
