@@ -180,12 +180,63 @@ def show_upload_screen():
     # ──────────────────────────────────────────
     # 문제 생성 버튼 → API 연동
     # ──────────────────────────────────────────
-    if st.button("문제 생성", type="primary", use_container_width=True, key="btn_gen_quiz"):
 
+    # 문제 생성 상태 초기화
+    if 'is_generating' not in st.session_state:
+        st.session_state.is_generating = False
+    
+    if st.button("문제 생성", type="primary", use_container_width=True, key="btn_gen_quiz",
+                 disabled=st.session_state.is_generating):
+        st.session_state.is_generating = True  # 문제 생성 시작
+        st.session_state.pending_generate = True # 작업 대기 플래그 
+        st.rerun()
+
+    # 버튼 클릭과 분리된 실제 실행 블록
+    if st.session_state.get("pending_generate"):
+        st.session_state.pending_generate = False  # 대기 플래그 초기화
+        
+        # 랭킹 정보 DB 저장
         user_id = st.session_state.get("user_info", {}).get("user_id")
         if not user_id:
             st.error("로그인이 필요합니다.")
             return
+    
+        group_id = str(uuid.uuid4())
+
+        # 업로드 함수 정의
+        def upload_file(file, mode, doc_type):
+            return requests.post(
+                "http://localhost:8000/retrieval/upload-pdf",
+                files={"file": (file.name, file.read(), "application/pdf")},
+                data={
+                    "user_id": USER_ID,
+                    "group_id": group_id,
+                    "doc_type": json.dumps({"mode": mode, "type": doc_type})
+                }
+            )
+
+        # 업로드할 파일 목록 구성
+        if upload_type == "교재에 직접 필기":
+            files_to_upload = [
+                (file, "single", None) 
+                for file in (st.session_state.get("single_up") or [])
+            ]
+        else:
+            files_to_upload = (
+                [(file, "combined", "textbook") for file in (st.session_state.get("double_up_1") or [])] +
+                [(file, "combined", "notes")    for file in (st.session_state.get("double_up_2") or [])]
+            )
+
+        # 병렬 업로드 (single/combined 모두 동일하게 처리)
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(upload_file, file, mode, doc_type) for file, mode, doc_type in files_to_upload]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"⚠️ 업로드 실패: {e}")
+
+        # DB에 저장할 랭킹 정보 저장
         payload = {
             "highlighter_ranking": convert_rank_to_json(st.session_state.up_hl_ranks),
             "pen_ranking": convert_rank_to_json(st.session_state.up_pen_ranks)
@@ -305,3 +356,5 @@ def show_upload_screen():
             except Exception as e:
                 status.update(label="연결 오류", state="error", expanded=True)
                 st.error(f"서버 연결 오류: {e}")
+            finally:
+                st.session_state.is_generating = False  # ← 성공/실패 무관하게 항상 해제
