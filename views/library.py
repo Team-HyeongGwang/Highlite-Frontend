@@ -77,8 +77,8 @@ def show_library_screen():
             "attempts": attempts,
         })
 
-    # 문서 순서 고정: document_id 기준 정렬
-    grouped_files = sorted(grouped_files, key=lambda x: x["id"])
+    # 최근 생성된 폴더가 위에 오도록 업로드 날짜 내림차순 정렬
+    grouped_files = sorted(grouped_files, key=lambda x: x["upload_date"], reverse=True)
     
     # attempts 없는 빈 폴더 숨김
     grouped_files = [f for f in grouped_files if f["total_count"] > 0]
