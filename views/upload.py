@@ -286,7 +286,7 @@ def show_upload_screen():
                         st.write("✨ 해설 작성 및 최종 검수 중...")
                         time.sleep(0.5)
                         status.update(label="문제 생성 완료!", state="complete", expanded=True)
-                        st.success(f"총 {len(questions)}문제가 성공적으로 생성되었습니다! 사이드바의 '문제 풀이'로 이동하세요.")
+                        st.success(f"총 {len(questions)}문제가 성공적으로 생성되었습니다! 사이드바의 '학습 자료실'로 이동하세요.")
                         st.balloons()
                     else:
                         status.update(label="생성 실패", state="error", expanded=True)
