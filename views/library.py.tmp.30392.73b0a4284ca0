@@ -72,7 +72,7 @@ def show_library_screen():
             "document_id": doc["document_id"],
             "group_id": doc.get("group_id"),
             "title": doc["title"],
-            "upload_date": _to_kst(doc["upload_date"]),
+            "upload_date": doc["upload_date"][:16].replace("T", " "),
             "total_count": doc["total_count"],
             "attempts": attempts,
         })
