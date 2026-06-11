@@ -1,7 +1,16 @@
 import streamlit as st
 import requests
+from datetime import datetime, timezone, timedelta
 
 BASE_URL = "http://127.0.0.1:8000"
+
+_KST = timezone(timedelta(hours=9))
+
+def _to_kst(iso_str: str) -> str:
+    dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_KST).strftime("%Y-%m-%d %H:%M")
 
 def show_library_screen():
     # ──────────────────────────────────────────
@@ -54,7 +63,7 @@ def show_library_screen():
                 "round": attempt["round"],
                 "q_num": attempt["q_num"],
                 "score": f"{score}%" if score is not None else "-",
-                "date": attempt["created_at"][:16].replace("T", " "),
+                "date": _to_kst(attempt["created_at"]),
                 "quiz_result_id": attempt.get("quiz_result_id"),
                 "quiz_group_id": attempt.get("quiz_group_id"),
             })
@@ -63,13 +72,13 @@ def show_library_screen():
             "document_id": doc["document_id"],
             "group_id": doc.get("group_id"),
             "title": doc["title"],
-            "upload_date": doc["upload_date"][:16].replace("T", " "),
+            "upload_date": _to_kst(doc["upload_date"]),
             "total_count": doc["total_count"],
             "attempts": attempts,
         })
 
-    # 문서 순서 고정: document_id 기준 정렬
-    grouped_files = sorted(grouped_files, key=lambda x: x["id"])
+    # 최근 생성된 폴더가 위에 오도록 업로드 날짜 내림차순 정렬
+    grouped_files = sorted(grouped_files, key=lambda x: x["upload_date"], reverse=True)
     
     # attempts 없는 빈 폴더 숨김
     grouped_files = [f for f in grouped_files if f["total_count"] > 0]
