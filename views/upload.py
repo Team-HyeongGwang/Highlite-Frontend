@@ -177,7 +177,7 @@ def show_upload_screen():
             
     st.markdown("<div style='margin-top: 40px;'></div>", unsafe_allow_html=True)
 
-    # ──────────────────────────────────────────
+# ──────────────────────────────────────────
     # 문제 생성 버튼 → API 연동
     # ──────────────────────────────────────────
 
@@ -195,48 +195,13 @@ def show_upload_screen():
     if st.session_state.get("pending_generate"):
         st.session_state.pending_generate = False  # 대기 플래그 초기화
         
-        # 랭킹 정보 DB 저장
         user_id = st.session_state.get("user_info", {}).get("user_id")
         if not user_id:
             st.error("로그인이 필요합니다.")
+            st.session_state.is_generating = False
             return
-    
-        group_id = str(uuid.uuid4())
-
-        # 업로드 함수 정의
-        def upload_file(file, mode, doc_type):
-            return requests.post(
-                "http://localhost:8000/retrieval/upload-pdf",
-                files={"file": (file.name, file.read(), "application/pdf")},
-                data={
-                    "user_id": USER_ID,
-                    "group_id": group_id,
-                    "doc_type": json.dumps({"mode": mode, "type": doc_type})
-                }
-            )
-
-        # 업로드할 파일 목록 구성
-        if upload_type == "교재에 직접 필기":
-            files_to_upload = [
-                (file, "single", None) 
-                for file in (st.session_state.get("single_up") or [])
-            ]
-        else:
-            files_to_upload = (
-                [(file, "combined", "textbook") for file in (st.session_state.get("double_up_1") or [])] +
-                [(file, "combined", "notes")    for file in (st.session_state.get("double_up_2") or [])]
-            )
-
-        # 병렬 업로드 (single/combined 모두 동일하게 처리)
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(upload_file, file, mode, doc_type) for file, mode, doc_type in files_to_upload]
-            for future in as_completed(futures):
-                try:
-                    future.result()
-                except Exception as e:
-                    print(f"⚠️ 업로드 실패: {e}")
-
-        # DB에 저장할 랭킹 정보 저장
+            
+        # 1. 랭킹 정보 DB 저장
         payload = {
             "highlighter_ranking": convert_rank_to_json(st.session_state.up_hl_ranks),
             "pen_ranking": convert_rank_to_json(st.session_state.up_pen_ranks)
@@ -256,14 +221,15 @@ def show_upload_screen():
         except Exception as e:
             print(f"⚠️ 백엔드 통신 오류: {e}")
 
+        # 2. 문서 업로드 로직 시작
         group_id = str(uuid.uuid4())
 
         def upload_file(file, mode, doc_type):
             return requests.post(
-                "http://localhost:8000/retrieval/upload-pdf",
+                f"{BASE_URL}/retrieval/upload-pdf",  # 하드코딩된 localhost 대신 BASE_URL 사용
                 files={"file": (file.name, file.read(), "application/pdf")},
                 data={
-                    "user_id": USER_ID,
+                    "user_id": user_id,
                     "group_id": group_id,
                     "doc_type": json.dumps({"mode": mode, "type": doc_type})
                 }
@@ -280,6 +246,15 @@ def show_upload_screen():
                 [(file, "combined", "notes")    for file in (st.session_state.get("double_up_2") or [])]
             )
 
+        # 업로드할 파일이 없는 경우 방어 로직
+        if not files_to_upload:
+            st.warning("업로드할 파일을 먼저 선택해주세요.")
+            st.session_state.is_generating = False
+            return
+
+        # ──────────────────────────────────────────
+        # 1. 문서 분석 상태창
+        # ──────────────────────────────────────────
         with st.status("문서를 분석하고 있습니다...", expanded=True) as upload_status:
             st.write("🧠 PDF 추출 및 중요도 분석 중... (문서 길이에 따라 1~2분 소요)")
 
@@ -297,15 +272,10 @@ def show_upload_screen():
         # 2. 문제 생성 상태창
         # ──────────────────────────────────────────
         with st.status("AI 1타 강사가 문제를 출제하고 있습니다...", expanded=True) as status:
-            st.write("🧠 분석된 핵심 개념을 바탕으로 문제 출제 중... (최대 1~3분 소요)")
+            st.write("📝 추출된 핵심 개념을 바탕으로 맞춤형 문제 출제 중...")
             st.caption("고품질의 문제를 만들기 위해 AI가 꼼꼼히 고민하고 있습니다. 잠시만 기다려주세요!")
 
             try:
-                if not group_id:
-                    status.update(label="생성 실패", state="error", expanded=True)
-                    st.error("문서 정보가 없습니다. PDF를 먼저 업로드해주세요.")
-                    st.stop()
-
                 response = requests.post(
                     f"{BASE_URL}/question/generate",
                     json={
@@ -320,9 +290,9 @@ def show_upload_screen():
                     questions = result.get("questions", [])
 
                     if questions:
-                        # 통신 성공 직후, 최종 검수 느낌으로 노출
+                        # 통신 성공 직후, 최종 검수 느낌으로 노출 (이전 디자인 복구)
                         st.write("⚖️ 생성된 문제의 퀄리티와 정답/해설 평가 중...")
-                        time.sleep(1.5) # 사용자가 이 문구를 읽을 수 있도록 약간 대기
+                        time.sleep(1.5)
 
                         st.session_state.questions = questions
                         st.session_state.user_id = user_id
@@ -333,11 +303,11 @@ def show_upload_screen():
                         st.session_state.quiz_result = {}
                         st.session_state.retry_counts = {}
 
-                        st.write("✨ 최종 검수 완료 및 저장 중...")
+                        st.write("✨ 최종 검수 완료 및 라이브러리 저장 중...")
                         time.sleep(0.5)
                         
                         status.update(label="문제 생성 완료!", state="complete", expanded=True)
-                        st.success(f"총 {len(questions)}문제가 성공적으로 생성되었습니다! 학습 자료실에서 문제를 확인하세요.")
+                        st.success(f"총 {len(questions)}문제가 성공적으로 생성되었습니다! 사이드바의 '학습 자료실'에서 문제를 확인하세요.")
                         st.balloons()
                     else:
                         status.update(label="생성 실패", state="error", expanded=True)
@@ -345,16 +315,16 @@ def show_upload_screen():
 
                 elif response.status_code == 404:
                     status.update(label="생성 실패", state="error", expanded=True)
-                    st.error("해당 문서의 중요도 분석 결과가 없습니다. PDF를 먼저 업로드해주세요.")
+                    st.error("해당 문서의 중요도 분석 결과가 없습니다. PDF 파싱 단계에서 오류가 났을 수 있습니다.")
                 else:
                     status.update(label="생성 실패", state="error", expanded=True)
-                    st.error(f"오류가 발생했습니다. (status: {response.status_code})")
+                    st.error(f"서버 내부 오류가 발생했습니다. (status: {response.status_code})")
 
             except requests.exceptions.Timeout:
                 status.update(label="시간 초과", state="error", expanded=True)
-                st.error("문제 생성 시간이 초과되었습니다. 다시 시도해주세요.")
+                st.error("서버 응답 시간이 초과되었습니다. (대용량 처리 중)")
             except Exception as e:
                 status.update(label="연결 오류", state="error", expanded=True)
-                st.error(f"서버 연결 오류: {e}")
+                st.error(f"백엔드 서버에 연결할 수 없습니다: {e}")
             finally:
-                st.session_state.is_generating = False  # ← 성공/실패 무관하게 항상 해제
+                st.session_state.is_generating = False  # ← 성공/실패 무관하게 항상 잠금 해제
