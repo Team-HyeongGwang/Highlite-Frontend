@@ -57,8 +57,11 @@ if st.session_state.get("pending_logout"):
     del st.session_state["pending_logout"]
 
 if "pending_login_token" in st.session_state:
-    cookie_controller.set("highlite_token", st.session_state["pending_login_token"], max_age=86400)
-    del st.session_state["pending_login_token"]
+    try:
+        cookie_controller.set("highlite_token", st.session_state["pending_login_token"], max_age=86400)
+        del st.session_state["pending_login_token"]
+    except TypeError:
+        pass
 
 if "access_token" not in st.session_state:
     try:
@@ -102,7 +105,10 @@ if "token" in st.query_params:
     except Exception:
         pass
         
-    cookie_controller.set("highlite_token", token, max_age=86400)
+    try:
+        cookie_controller.set("highlite_token", token, max_age=86400)
+    except TypeError:
+        pass
     st.query_params.clear()
     time.sleep(0.5)
     st.rerun()
