@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 
 def show_mypage_screen():
+    headers = {"Authorization": f"Bearer {st.session_state.get('access_token', '')}"}
     user = st.session_state.get("user_info", {})
     username = user.get("username", "로그인 필요")
     email = user.get("email", "로그인 필요")
@@ -43,14 +44,17 @@ def show_mypage_screen():
         with c2:
             if st.button("네, 탈퇴합니다", type="primary", use_container_width=True):
                 try:
-                    response = requests.delete("http://localhost:8000/users/account", json={"email": email})
+                    response = requests.delete("http://localhost:8000/users/account", headers=headers)
                     
                     if response.status_code == 200:
                         st.toast("회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.", icon="👋")
                         del st.session_state["access_token"]
                         del st.session_state["user_info"]
+                        st.session_state["pending_logout"] = True   # ← 추가: 쿠키도 삭제
                         st.session_state.show_mypage = False
                         st.rerun()
+                    elif response.status_code in (401, 403):
+                        st.error("로그인이 만료되었습니다. 다시 로그인해 주세요.")
                     else:
                         st.error("탈퇴 처리 중 오류가 발생했습니다.")
                 except Exception as e:
@@ -100,11 +104,12 @@ def show_mypage_screen():
         with nc2: 
             if st.button("수정", key="edit_name", use_container_width=True):
                 try:
-                    response = requests.put("http://localhost:8000/users/nickname", json={"email": email, "new_nickname": new_name})
+                    response = requests.put("http://localhost:8000/users/nickname", headers=headers, json={"new_nickname": new_name})
                     if response.status_code == 200:
                         st.session_state["user_info"]["username"] = new_name
                         st.toast("닉네임이 변경되었습니다.")
                         st.rerun()
+                    elif response.status_code in (401, 403): st.error("로그인이 만료되었습니다. 다시 로그인해 주세요.")
                     else:
                         st.error("닉네임 변경 실패")
                 except Exception as e:
